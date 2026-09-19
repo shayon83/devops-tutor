@@ -1,32 +1,9 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
-
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+# Project context
+context: |
+  DevOps LLM Voice Tutor Web Application
+  - Stack: LiveKit Agents WebRTC, FastAPI, Redis 7, React + Vite, Prometheus, Loki, Grafana
+  - Architecture: 2D Orthogonal Matrix (VOICE_PIPELINE_MODE=realtime|modular, AGENT_DISPATCH_TYPE=local|cloud)
+  - Persona: Socratic SRE Tutor with real-time WebRTC DataTrack visual workspace (Mermaid.js + YAML cards)
+  - Deployment: Single-command Docker Compose (`docker compose up --build`), zero hardcoded secrets (.env)
