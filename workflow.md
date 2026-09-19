@@ -41,8 +41,8 @@ This document details the exact AI tools, models, harnesses, and spec-driven wor
 ```
 
 ### Phase 1: Interactive Architecture Exploration (`/opsx-explore`)
-- Utilized `/opsx-explore` to analyze the tradeoffs between Direct Speech-to-Speech (Realtime API) vs. Modular (STT $\rightarrow$ LLM $\rightarrow$ TTS) pipelines.
-- Formulated the clean 5-tier architecture (React Web UI, FastAPI Token Backend, Python LiveKit Agent Worker, Redis 7 State Repository, Prometheus/Grafana Telemetry Stack).
+- Utilized `/opsx-explore` to analyze the tradeoffs between Direct Speech-to-Speech (Realtime API), Modular (STT -> LLM -> TTS), and LiveKit Cloud Managed Inference pipelines.
+- Formulated the clean 5-tier architecture (React Web UI, FastAPI Token Backend, Python LiveKit Agent Worker, Redis 7 State Repository, Prometheus/Grafana Telemetry Stack scraping both application turn metrics and native LiveKit SFU metrics).
 
 ### Phase 2: Spec-Driven Change Proposal (`/opsx-propose`)
 - Executed `/opsx-propose` to scaffold the `create-devops-voice-tutor` change artifacts.

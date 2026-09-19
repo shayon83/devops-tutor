@@ -10,7 +10,7 @@ class VoicePipelineFactory:
         mode = mode.lower()
         logger.info(f"Creating Voice Agent in mode: '{mode}'")
 
-        if mode == "realtime":
+        if mode in ("realtime", "livekit_managed"):
             try:
                 from livekit.agents.multimodal import MultimodalAgent
                 from livekit.plugins import openai
@@ -29,7 +29,7 @@ class VoicePipelineFactory:
                         voice="alloy"
                     )
                 else:
-                    logger.info("Using Standard OpenAI Realtime Model")
+                    logger.info("Using Standard OpenAI / LiveKit Managed Realtime Model")
                     model = openai.realtime.RealtimeModel(
                         instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
                         voice="alloy"
