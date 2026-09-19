@@ -84,5 +84,5 @@ See `proposal.md` for overall motivation. The project requires building an inter
 ## 10,000 Concurrent Sessions Scaling Strategy (For README)
 
 1. **State Tier**: Migrate single Redis instance to a **Redis Cluster** with sharding on `session_id` hash tags (`session:{<session_id>}:...`).
-2. **Agent Tier**: Scale LiveKit Agent workers horizontally on Kubernetes using HPA (Horizontal Pod Autoscaler) based on CPU/RAM and active room metrics. LiveKit server natively load-balances rooms across worker instances.
+2. **Agent Tier**: Scale LiveKit Agent workers horizontally on Kubernetes using HPA (Horizontal Pod Autoscaler) based on CPU/RAM and active job metrics. LiveKit Server's built-in **Job Dispatcher** automatically distributes incoming room job requests (`JobRequest`) across the pool of registered Agent Worker instances.
 3. **API Tier**: Keep token backend stateless behind AWS ALB / NGINX ingress.
