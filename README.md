@@ -40,15 +40,70 @@ The system follows a clean, decoupled 5-tier architecture:
 
 ---
 
-## ⚡ Key Design Decisions & Tradeoffs
+## 🎛️ Pipeline Modes & `.env` Configuration Guide
 
-1. **Direct Speech-to-Speech (Realtime API) over Modular Pipeline**:
-   - **Decision**: Used Direct Speech-to-Speech (`openai.realtime.RealtimeModel`) to achieve natural vocal prosody, warm human intonation, and ultra-low response latency (~350ms).
-   - **Tradeoff**: We exchange granular component-by-component waterfall latency metrics ($STT$, $LLM_{TTFT}$, $TTS$) for End-to-End ($Audio_{in} \rightarrow Audio_{out}$) latency tracking, gaining human-like conversational responsiveness for the learner.
-   - **Factory Pattern Toggle**: Set `VOICE_PIPELINE_MODE=realtime` (Azure/OpenAI Direct Speech), `VOICE_PIPELINE_MODE=modular` (STT -> LLM -> TTS), or `VOICE_PIPELINE_MODE=livekit_managed` (LiveKit Cloud Managed Inference) in `.env` without altering application code.
+The application supports **3 distinct voice pipeline modes** via `VOICE_PIPELINE_MODE` in `.env`:
 
-4. **Native LiveKit SFU Prometheus Metrics**:
-   - **Decision**: Prometheus scrapes native LiveKit SFU WebRTC metrics (`livekit_room_count`, `livekit_audio_packet_loss_ratio`, `livekit_audio_jitter_ms`) directly from LiveKit Server (`livekit:7880/metrics`).
+```text
++---------------------------------------------------------------------------------------+
+|                              PIPELINE MODE CONFIGURATIONS                             |
++---------------------------------------------------------------------------------------+
+|                                                                                       |
+|  [ MODE 1: Direct Speech-to-Speech ]  (VOICE_PIPELINE_MODE=realtime)  [RECOMMENDED]   |
+|  - Uses OpenAI or Microsoft Azure AI Foundry Realtime API (~350ms latency)             |
+|  - Set OPENAI_API_KEY  OR  AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY               |
+|                                                                                       |
+|  [ MODE 2: LiveKit Managed Inference ] (VOICE_PIPELINE_MODE=livekit_managed)         |
+|  - Routes audio and AI tokens through LiveKit Cloud Managed Agent infrastructure       |
+|  - Uses LIVEKIT_URL + LIVEKIT_API_KEY + LIVEKIT_API_SECRET                            |
+|                                                                                       |
+|  [ MODE 3: Modular Pipeline ]          (VOICE_PIPELINE_MODE=modular)                 |
+|  - Classic VAD -> STT -> LLM -> TTS pipeline for component latency inspection          |
+|  - Set DEEPGRAM_API_KEY + OPENAI_API_KEY + ELEVENLABS_API_KEY                         |
++---------------------------------------------------------------------------------------+
+```
+
+### Quick `.env` Setup by Mode:
+
+#### Mode 1A: Direct Speech-to-Speech (Standard OpenAI)
+```bash
+LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
+LIVEKIT_API_KEY=your_key
+LIVEKIT_API_SECRET=your_secret
+VOICE_PIPELINE_MODE=realtime
+OPENAI_API_KEY=sk-proj-your-openai-key
+```
+
+#### Mode 1B: Direct Speech-to-Speech (Microsoft Azure AI Foundry)
+```bash
+LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
+LIVEKIT_API_KEY=your_key
+LIVEKIT_API_SECRET=your_secret
+VOICE_PIPELINE_MODE=realtime
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_API_KEY=your_azure_foundry_key
+AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini-realtime-preview
+AZURE_OPENAI_API_VERSION=2024-10-01-preview
+```
+
+#### Mode 2: LiveKit Cloud Managed Inference
+```bash
+LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
+LIVEKIT_API_KEY=your_key
+LIVEKIT_API_SECRET=your_secret
+VOICE_PIPELINE_MODE=livekit_managed
+```
+
+#### Mode 3: Modular Pipeline (Deepgram + OpenAI + ElevenLabs)
+```bash
+LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
+LIVEKIT_API_KEY=your_key
+LIVEKIT_API_SECRET=your_secret
+VOICE_PIPELINE_MODE=modular
+DEEPGRAM_API_KEY=your_deepgram_key
+OPENAI_API_KEY=sk-proj-your-openai-key
+ELEVENLABS_API_KEY=your_elevenlabs_key
+```
 
 2. **Redis 7 as Backing State Store**:
    - **Decision**: Decoupled session state, conversation turn history (`RPUSH`), takeaways, and CSAT feedback under `session:<id>:*` keys.
