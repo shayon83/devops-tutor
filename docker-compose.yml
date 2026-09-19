@@ -10,8 +10,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: devops-tutor-backend
     ports:
       - "8000:8000"
@@ -26,8 +26,8 @@ services:
 
   agent:
     build:
-      context: ./agent
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: agent/Dockerfile
     container_name: devops-tutor-agent
     ports:
       - "8001:8001"

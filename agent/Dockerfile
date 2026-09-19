@@ -8,11 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY agent/requirements.txt ./agent/requirements.txt
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir -r ./agent/requirements.txt -r ./backend/requirements.txt
 
-COPY src/ ./src/
+COPY backend/src/ ./backend/src/
+COPY agent/src/ ./agent/src/
+ENV PYTHONPATH=/app
 
 EXPOSE 8001
 
-CMD ["python", "src/agent.py", "start"]
+CMD ["python", "agent/src/agent.py", "start"]
