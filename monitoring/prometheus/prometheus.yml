@@ -10,3 +10,7 @@ scrape_configs:
   - job_name: 'devops-tutor-agent'
     static_configs:
       - targets: ['agent:8001']
+
+  - job_name: 'livekit-sfu'
+    static_configs:
+      - targets: ['livekit:7880']

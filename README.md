@@ -45,7 +45,10 @@ The system follows a clean, decoupled 5-tier architecture:
 1. **Direct Speech-to-Speech (Realtime API) over Modular Pipeline**:
    - **Decision**: Used Direct Speech-to-Speech (`openai.realtime.RealtimeModel`) to achieve natural vocal prosody, warm human intonation, and ultra-low response latency (~350ms).
    - **Tradeoff**: We exchange granular component-by-component waterfall latency metrics ($STT$, $LLM_{TTFT}$, $TTS$) for End-to-End ($Audio_{in} \rightarrow Audio_{out}$) latency tracking, gaining human-like conversational responsiveness for the learner.
-   - **Factory Pattern Toggle**: Set `VOICE_PIPELINE_MODE=modular` in `.env` to test the classic STT $\rightarrow$ LLM $\rightarrow$ TTS pipeline without changing application code.
+   - **Factory Pattern Toggle**: Set `VOICE_PIPELINE_MODE=realtime` (Azure/OpenAI Direct Speech), `VOICE_PIPELINE_MODE=modular` (STT -> LLM -> TTS), or `VOICE_PIPELINE_MODE=livekit_managed` (LiveKit Cloud Managed Inference) in `.env` without altering application code.
+
+4. **Native LiveKit SFU Prometheus Metrics**:
+   - **Decision**: Prometheus scrapes native LiveKit SFU WebRTC metrics (`livekit_room_count`, `livekit_audio_packet_loss_ratio`, `livekit_audio_jitter_ms`) directly from LiveKit Server (`livekit:7880/metrics`).
 
 2. **Redis 7 as Backing State Store**:
    - **Decision**: Decoupled session state, conversation turn history (`RPUSH`), takeaways, and CSAT feedback under `session:<id>:*` keys.
