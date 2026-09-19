@@ -6,11 +6,12 @@ logger = logging.getLogger(__name__)
 
 class VoicePipelineFactory:
     @staticmethod
-    def create_agent(mode: str = "realtime"):
-        mode = mode.lower()
-        logger.info(f"Creating Voice Agent in mode: '{mode}'")
+    def create_agent(pipeline_mode: str = "realtime", dispatch_type: str = "local"):
+        pipeline_mode = pipeline_mode.lower()
+        dispatch_type = dispatch_type.lower()
+        logger.info(f"Creating Voice Agent [Mode: '{pipeline_mode}', Dispatch: '{dispatch_type}']")
 
-        if mode in ("realtime", "livekit_managed"):
+        if pipeline_mode == "realtime":
             try:
                 from livekit.agents.multimodal import MultimodalAgent
                 from livekit.plugins import openai
@@ -29,7 +30,7 @@ class VoicePipelineFactory:
                         voice="alloy"
                     )
                 else:
-                    logger.info("Using Standard OpenAI / LiveKit Managed Realtime Model")
+                    logger.info("Using Standard OpenAI Realtime Model")
                     model = openai.realtime.RealtimeModel(
                         instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
                         voice="alloy"
@@ -38,11 +39,12 @@ class VoicePipelineFactory:
             except Exception as e:
                 logger.warning(f"Failed to instantiate Realtime model, falling back to modular: {e}")
 
-        # Modular Pipeline Fallback (VAD -> STT -> LLM -> TTS)
+        # Modular Pipeline Mode (Supported for both local worker and cloud dispatch)
         try:
             from livekit.agents import VoicePipelineAgent
             from livekit.plugins import silero, deepgram, openai, elevenlabs
 
+            logger.info("Using Modular Pipeline (Silero VAD + Deepgram STT + LLM + ElevenLabs TTS)")
             return VoicePipelineAgent(
                 vad=silero.VAD.load(),
                 stt=deepgram.STT(),

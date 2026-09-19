@@ -31,14 +31,15 @@ INTERRUPTION_COUNTER = Counter("voice_tutor_interruptions_total", "Total Barge-i
 redis_host = os.getenv("REDIS_HOST", "localhost")
 redis_port = int(os.getenv("REDIS_PORT", 6379))
 pipeline_mode = os.getenv("VOICE_PIPELINE_MODE", "realtime")
+dispatch_type = os.getenv("AGENT_DISPATCH_TYPE", "local")
 
 redis_repo = RedisSessionRepository(host=redis_host, port=redis_port)
 
 async def entrypoint(ctx: JobContext):
-    logger.info(f"Agent joining room: {ctx.room.name}")
+    logger.info(f"Agent joining room: {ctx.room.name} [Mode: {pipeline_mode}, Dispatch: {dispatch_type}]")
     await ctx.connect()
 
-    agent = VoicePipelineFactory.create_agent(mode=pipeline_mode)
+    agent = VoicePipelineFactory.create_agent(pipeline_mode=pipeline_mode, dispatch_type=dispatch_type)
     
     # Send welcome visual card via DataTrack
     async def send_visual_card(data_dict: dict):

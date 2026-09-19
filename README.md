@@ -40,66 +40,56 @@ The system follows a clean, decoupled 5-tier architecture:
 
 ---
 
-## 🎛️ Pipeline Modes & `.env` Configuration Guide
+## 🎛️ Pipeline Modes & Deployment Settings Guide
 
-The application supports **3 distinct voice pipeline modes** via `VOICE_PIPELINE_MODE` in `.env`:
+The application separates voice architecture and deployment into **2 orthogonal settings** in `.env`:
+
+1. **`VOICE_PIPELINE_MODE`** (`realtime` | `modular`): Controls the AI model architecture.
+   - `realtime`: Direct Speech-to-Speech audio tokens (~350ms latency) via Azure OpenAI or OpenAI Realtime.
+   - `modular`: VAD $\rightarrow$ STT (Deepgram) $\rightarrow$ LLM $\rightarrow$ TTS (ElevenLabs) pipeline.
+
+2. **`AGENT_DISPATCH_TYPE`** (`local` | `cloud`): Controls the worker execution location.
+   - `local`: Self-hosted worker running inside Docker Compose.
+   - `cloud`: Managed worker dispatched via LiveKit Cloud Agents infrastructure.
 
 ```text
 +---------------------------------------------------------------------------------------+
-|                              PIPELINE MODE CONFIGURATIONS                             |
+|                              2D CONFIGURATION MATRIX                                  |
 +---------------------------------------------------------------------------------------+
 |                                                                                       |
-|  [ MODE 1: Direct Speech-to-Speech ]  (VOICE_PIPELINE_MODE=realtime)  [RECOMMENDED]   |
-|  - Uses OpenAI or Microsoft Azure AI Foundry Realtime API (~350ms latency)             |
-|  - Set OPENAI_API_KEY  OR  AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY               |
+|  [ Local + Realtime ]  (VOICE_PIPELINE_MODE=realtime, AGENT_DISPATCH_TYPE=local)     |
+|  - Self-hosted Docker worker using Azure OpenAI / OpenAI Realtime [RECOMMENDED]       |
 |                                                                                       |
-|  [ MODE 2: LiveKit Managed Inference ] (VOICE_PIPELINE_MODE=livekit_managed)         |
-|  - Routes audio and AI tokens through LiveKit Cloud Managed Agent infrastructure       |
-|  - Uses LIVEKIT_URL + LIVEKIT_API_KEY + LIVEKIT_API_SECRET                            |
+|  [ Local + Modular ]   (VOICE_PIPELINE_MODE=modular, AGENT_DISPATCH_TYPE=local)      |
+|  - Self-hosted Docker worker using Deepgram + ElevenLabs for waterfall latency tests   |
 |                                                                                       |
-|  [ MODE 3: Modular Pipeline ]          (VOICE_PIPELINE_MODE=modular)                 |
-|  - Classic VAD -> STT -> LLM -> TTS pipeline for component latency inspection          |
-|  - Set DEEPGRAM_API_KEY + OPENAI_API_KEY + ELEVENLABS_API_KEY                         |
+|  [ Cloud + Realtime ]  (VOICE_PIPELINE_MODE=realtime, AGENT_DISPATCH_TYPE=cloud)     |
+|  - LiveKit Cloud Agents running Direct Speech-to-Speech                               |
+|                                                                                       |
+|  [ Cloud + Modular ]   (VOICE_PIPELINE_MODE=modular, AGENT_DISPATCH_TYPE=cloud)      |
+|  - LiveKit Cloud Agents running Managed STT/TTS modular pipeline                      |
 +---------------------------------------------------------------------------------------+
 ```
 
-### Quick `.env` Setup by Mode:
+### Quick `.env` Setup Examples:
 
-#### Mode 1A: Direct Speech-to-Speech (Standard OpenAI)
+#### Example 1: Local Docker Worker + Direct Speech (Azure AI Foundry / OpenAI)
 ```bash
 LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
 LIVEKIT_API_KEY=your_key
 LIVEKIT_API_SECRET=your_secret
 VOICE_PIPELINE_MODE=realtime
+AGENT_DISPATCH_TYPE=local
 OPENAI_API_KEY=sk-proj-your-openai-key
 ```
 
-#### Mode 1B: Direct Speech-to-Speech (Microsoft Azure AI Foundry)
-```bash
-LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
-LIVEKIT_API_KEY=your_key
-LIVEKIT_API_SECRET=your_secret
-VOICE_PIPELINE_MODE=realtime
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_API_KEY=your_azure_foundry_key
-AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini-realtime-preview
-AZURE_OPENAI_API_VERSION=2024-10-01-preview
-```
-
-#### Mode 2: LiveKit Cloud Managed Inference
-```bash
-LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
-LIVEKIT_API_KEY=your_key
-LIVEKIT_API_SECRET=your_secret
-VOICE_PIPELINE_MODE=livekit_managed
-```
-
-#### Mode 3: Modular Pipeline (Deepgram + OpenAI + ElevenLabs)
+#### Example 2: LiveKit Cloud Agent + Modular Pipeline (Cloud + Modular)
 ```bash
 LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
 LIVEKIT_API_KEY=your_key
 LIVEKIT_API_SECRET=your_secret
 VOICE_PIPELINE_MODE=modular
+AGENT_DISPATCH_TYPE=cloud
 DEEPGRAM_API_KEY=your_deepgram_key
 OPENAI_API_KEY=sk-proj-your-openai-key
 ELEVENLABS_API_KEY=your_elevenlabs_key
