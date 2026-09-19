@@ -14,10 +14,26 @@ class VoicePipelineFactory:
             try:
                 from livekit.agents.multimodal import MultimodalAgent
                 from livekit.plugins import openai
-                model = openai.realtime.RealtimeModel(
-                    instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
-                    voice="alloy"
-                )
+
+                azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+                azure_key = os.getenv("AZURE_OPENAI_API_KEY")
+
+                if azure_endpoint and azure_key:
+                    logger.info("Using Azure OpenAI / Microsoft Foundry Realtime Model")
+                    model = openai.realtime.RealtimeModel.with_azure(
+                        azure_endpoint=azure_endpoint,
+                        azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini-realtime-preview"),
+                        api_key=azure_key,
+                        api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-01-preview"),
+                        instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
+                        voice="alloy"
+                    )
+                else:
+                    logger.info("Using Standard OpenAI Realtime Model")
+                    model = openai.realtime.RealtimeModel(
+                        instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
+                        voice="alloy"
+                    )
                 return MultimodalAgent(model=model)
             except Exception as e:
                 logger.warning(f"Failed to instantiate Realtime model, falling back to modular: {e}")
