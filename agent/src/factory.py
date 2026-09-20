@@ -13,8 +13,10 @@ class VoiceAgentFactory:
 
         return voice.Agent(
             instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
-            llm=inference.LLM(model="openai/gpt-4o-mini")
+            stt=inference.STT(model="deepgram/flux-general"),
+            llm=inference.LLM(model="openai/gpt-4o-mini"),
+            tts=inference.TTS(model="elevenlabs/eleven-multilingual-v2")
         )
 
-# Retain backward compatibility alias if needed by older imports
+# Retain backward compatibility alias
 VoicePipelineFactory = VoiceAgentFactory
