@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Room, RoomEvent, Track } from 'livekit-client';
 import Header from './components/Header';
 import VoiceControlPanel from './components/VoiceControlPanel';
 import VisualWorkspace from './components/VisualWorkspace';
@@ -14,12 +15,20 @@ export default function App() {
   const [transcripts, setTranscripts] = useState([]);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
+  const roomRef = useRef(null);
   const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
+  useEffect(() => {
+    if (roomRef.current && isConnected) {
+      roomRef.current.localParticipant.setMicrophoneEnabled(!isMuted);
+    }
+  }, [isMuted, isConnected]);
 
   const handleStartSession = async () => {
     setIsConnecting(true);
     const newSessionId = `devops-room-${Date.now().toString().slice(-6)}`;
     setSessionId(newSessionId);
+    setVisualPayloads([]);
 
     try {
       const res = await fetch(`${API_BASE}/api/token`, {
@@ -36,19 +45,71 @@ export default function App() {
       const data = await res.json();
       console.log('Obtained LiveKit token:', data);
 
+      const room = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+      });
+
+      roomRef.current = room;
+
+      room.on(RoomEvent.DataReceived, (payload) => {
+        try {
+          const str = new TextDecoder().decode(payload);
+          const dataPayload = JSON.parse(str);
+          console.log('DataTrack received:', dataPayload);
+          setVisualPayloads(prev => [...prev, dataPayload]);
+        } catch (e) {
+          console.warn('DataTrack parse error:', e);
+        }
+      });
+
+      room.on(RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind === Track.Kind.Audio) {
+          const audioEl = track.attach();
+          document.body.appendChild(audioEl);
+          audioEl.play().catch(e => console.warn('Audio autoplay warning:', e));
+        }
+      });
+
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (track.kind === Track.Kind.Audio) {
+          track.detach().forEach(el => el.remove());
+        }
+      });
+
+      room.on(RoomEvent.TranscriptionReceived, (transcriptions, participant) => {
+        transcriptions.forEach(t => {
+          setTranscripts(prev => [
+            ...prev,
+            { role: participant?.identity?.startsWith('student') ? 'user' : 'tutor', text: t.text }
+          ]);
+        });
+      });
+
+      room.on(RoomEvent.Disconnected, () => {
+        setIsConnected(false);
+      });
+
+      await room.connect(data.livekit_url, data.token);
+      await room.localParticipant.setMicrophoneEnabled(true);
+
       setIsConnected(true);
       setTranscripts([
         { role: 'tutor', text: `Welcome! Let's explore ${selectedSubject}. What aspect would you like to start with?` }
       ]);
     } catch (e) {
       console.error("Connection error:", e);
-      alert("Could not connect to voice backend API. Ensure backend is running.");
+      alert("Could not connect to LiveKit voice server. Please verify your LiveKit credentials in .env.");
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
+    if (roomRef.current) {
+      roomRef.current.disconnect();
+      roomRef.current = null;
+    }
     setIsConnected(false);
     setIsFeedbackOpen(true);
   };

@@ -25,7 +25,11 @@ The LiveKit Agent worker SHALL process voice turns using a Socratic SRE persona 
 
 #### Scenario: LiveKit Managed Inference mode toggle
 - **WHEN** `AGENT_DISPATCH_TYPE` is set to `cloud` in `.env`
-- **THEN** the agent worker connects and routes audio and AI tokens through LiveKit Cloud managed infrastructure.
+- **THEN** the agent worker initializes LiveKit Managed Inference (`from livekit.agents import inference`) routing all STT, LLM, and TTS inference requests directly through LiveKit Cloud credits without requiring 3rd-party API keys.
+
+#### Scenario: Local Worker BYOK mode toggle
+- **WHEN** `AGENT_DISPATCH_TYPE` is set to `local` in `.env`
+- **THEN** the self-hosted agent worker validates local environment keys (`OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`) and connects directly to provider APIs.
 
 ### Requirement: Real-Time DevOps Visual Workspace Rendering
 The system SHALL transmit visual workspace payloads (Mermaid.js architectural diagrams, YAML manifests, syntax-highlighted code cards) over the LiveKit WebRTC Data Channel (`DataTrack`) for real-time rendering in the Web UI.
