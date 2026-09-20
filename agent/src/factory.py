@@ -11,11 +11,11 @@ class VoicePipelineFactory:
         dispatch_type = dispatch_type.lower()
         logger.info(f"Creating Voice Agent [Mode: '{pipeline_mode}', Dispatch: '{dispatch_type}']")
 
+        from livekit.agents.voice import Agent
+        from livekit.plugins import openai
+
         if pipeline_mode == "realtime":
             try:
-                from livekit.agents.multimodal import MultimodalAgent
-                from livekit.plugins import openai
-
                 azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
                 azure_key = os.getenv("AZURE_OPENAI_API_KEY")
 
@@ -26,31 +26,42 @@ class VoicePipelineFactory:
                         azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini-realtime-preview"),
                         api_key=azure_key,
                         api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-01-preview"),
-                        instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
                         voice="alloy"
                     )
                 else:
                     logger.info("Using Standard OpenAI Realtime Model")
                     model = openai.realtime.RealtimeModel(
-                        instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
                         voice="alloy"
                     )
-                return MultimodalAgent(model=model)
+                return Agent(instructions=DEVOPS_TUTOR_SYSTEM_PROMPT, llm=model)
             except Exception as e:
                 logger.warning(f"Failed to instantiate Realtime model, falling back to modular: {e}")
 
         # Modular Pipeline Mode (Supported for both local worker and cloud dispatch)
         try:
-            from livekit.agents import VoicePipelineAgent
-            from livekit.plugins import silero, deepgram, openai, elevenlabs
+            from livekit.plugins import silero
 
-            logger.info("Using Modular Pipeline (Silero VAD + Deepgram STT + LLM + ElevenLabs TTS)")
-            return VoicePipelineAgent(
+            # Fallback for STT and TTS keys if Deepgram/ElevenLabs keys are missing
+            if os.getenv("DEEPGRAM_API_KEY"):
+                from livekit.plugins import deepgram
+                stt = deepgram.STT()
+            else:
+                stt = openai.STT()
+
+            if os.getenv("ELEVENLABS_API_KEY") or os.getenv("ELEVEN_API_KEY"):
+                from livekit.plugins import elevenlabs
+                tts = elevenlabs.TTS()
+            else:
+                tts = openai.TTS(voice="alloy")
+
+            logger.info("Using Modular Pipeline")
+            return Agent(
+                instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
                 vad=silero.VAD.load(),
-                stt=deepgram.STT(),
+                stt=stt,
                 llm=openai.LLM(model="gpt-4o-mini"),
-                tts=elevenlabs.TTS()
+                tts=tts
             )
         except Exception as e:
-            logger.error(f"Error instantiating VoicePipelineAgent: {e}")
+            logger.error(f"Error instantiating Voice Agent: {e}")
             raise e
