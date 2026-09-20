@@ -2,48 +2,227 @@
   "annotations": { "list": [] },
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": null,
   "links": [],
-  "liveNow": false,
+  "liveNow": true,
   "panels": [
     {
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Voice Session & Learner Experience KPIs",
+      "type": "row"
+    },
+    {
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
       "id": 1,
-      "title": "Backend Request Rate (RPS)",
-      "type": "timeseries",
+      "title": "Active Tutoring Sessions",
+      "type": "stat",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
       "targets": [
-        { "expr": "rate(http_requests_total[1m])", "legendFormat": "{{method}} {{handler}}" }
+        { "expr": "voice_tutor_active_sessions_total", "legendFormat": "Sessions" }
       ]
     },
     {
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
       "id": 2,
-      "title": "Voice Turn End-to-End Latency (ms)",
+      "title": "Average Learner CSAT Rating",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "max": 5,
+          "min": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 3.0 },
+              { "color": "yellow", "value": 4.0 },
+              { "color": "green", "value": 4.5 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "targets": [
+        { "expr": "avg(voice_tutor_csat_rating_stars)", "legendFormat": "Stars (1-5)" }
+      ]
+    },
+    {
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "id": 3,
+      "title": "Barge-in Interruptions",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "expr": "sum(voice_tutor_interruptions_total)", "legendFormat": "Interruptions" }
+      ]
+    },
+    {
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "id": 4,
+      "title": "Service Component Health",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "expr": "sum(up)", "legendFormat": "Up Targets" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "id": 200,
+      "title": "Voice Latency Waterfall & Performance",
+      "type": "row"
+    },
+    {
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "id": 5,
+      "title": "End-to-End Voice Latency (ms)",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth"
+          },
+          "unit": "ms"
+        }
+      },
       "targets": [
+        { "expr": "histogram_quantile(0.99, sum(rate(voice_tutor_e2e_latency_ms_bucket[5m])) by (le))", "legendFormat": "p99 Latency" },
         { "expr": "histogram_quantile(0.95, sum(rate(voice_tutor_e2e_latency_ms_bucket[5m])) by (le))", "legendFormat": "p95 Latency" },
         { "expr": "histogram_quantile(0.50, sum(rate(voice_tutor_e2e_latency_ms_bucket[5m])) by (le))", "legendFormat": "p50 Latency" }
       ]
     },
     {
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
-      "id": 3,
-      "title": "Average Learner CSAT Rating",
-      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "id": 6,
+      "title": "HTTP API Request Latency (seconds)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95 Duration" },
+        { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50 Duration" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "id": 300,
+      "title": "Backend Throughput & API Metrics",
+      "type": "row"
+    },
+    {
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 16 },
+      "id": 7,
+      "title": "API Request Throughput (RPS)",
+      "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
       "targets": [
-        { "expr": "avg(voice_tutor_csat_rating_stars)", "legendFormat": "Stars (1-5)" }
+        { "expr": "sum(rate(http_requests_total[1m])) by (handler, status)", "legendFormat": "{{handler}} ({{status}})" }
+      ]
+    },
+    {
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "id": 8,
+      "title": "HTTP 5xx Error Rate (%)",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total{status=~\"5..\"}[1m])) / sum(rate(http_requests_total[1m])) * 100", "legendFormat": "Error %" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
+      "id": 400,
+      "title": "Container Log Streams (Loki)",
+      "type": "row"
+    },
+    {
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 25 },
+      "id": 9,
+      "title": "Live Application Log Stream",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "options": {
+        "enableLogDetails": true,
+        "showLabels": true,
+        "showTime": true,
+        "wrapLogMessage": true
+      },
+      "targets": [
+        { "expr": "{container_name=~\"devops-tutor-backend|devops-tutor-agent\"}", "legendFormat": "" }
       ]
     }
   ],
   "refresh": "5s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["devops", "voice-tutor"],
+  "tags": ["devops", "voice-tutor", "telemetry"],
   "time": { "from": "now-15m", "to": "now" },
-  "title": "DevOps Voice Tutor Metrics",
+  "title": "DevOps Voice Tutor Overview & Telemetry",
   "uid": "devops-tutor-overview"
 }
