@@ -12,8 +12,8 @@ COPY agent/requirements.txt ./agent/requirements.txt
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r ./agent/requirements.txt -r ./backend/requirements.txt
 
-COPY backend/src/ ./backend/src/
-COPY agent/src/ ./agent/src/
+COPY backend/ ./backend/
+COPY agent/ ./agent/
 ENV PYTHONPATH=/app
 
 EXPOSE 8001
