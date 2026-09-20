@@ -12,9 +12,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from prometheus_client import start_http_server, Histogram, Counter
 from livekit import rtc
 from livekit.agents import JobContext, WorkerOptions, cli
+from livekit.agents.voice import AgentSession
 
 from backend.src.session_manager import RedisSessionRepository
-from agent.src.factory import VoicePipelineFactory
+from agent.src.factory import VoiceAgentFactory
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -30,16 +31,13 @@ INTERRUPTION_COUNTER = Counter("voice_tutor_interruptions_total", "Total Barge-i
 
 redis_host = os.getenv("REDIS_HOST", "localhost")
 redis_port = int(os.getenv("REDIS_PORT", 6379))
-pipeline_mode = os.getenv("VOICE_PIPELINE_MODE", "realtime")
-dispatch_type = os.getenv("AGENT_DISPATCH_TYPE", "local")
-
 redis_repo = RedisSessionRepository(host=redis_host, port=redis_port)
 
 async def entrypoint(ctx: JobContext):
-    logger.info(f"Agent joining room: {ctx.room.name} [Mode: {pipeline_mode}, Dispatch: {dispatch_type}]")
+    logger.info(f"Agent joining room: {ctx.room.name} [LiveKit Cloud Managed Inference]")
     await ctx.connect()
 
-    agent = VoicePipelineFactory.create_agent(pipeline_mode=pipeline_mode, dispatch_type=dispatch_type)
+    agent = VoiceAgentFactory.create_agent()
     
     # Send welcome visual card via DataTrack
     async def send_visual_card(data_dict: dict):
@@ -56,7 +54,6 @@ async def entrypoint(ctx: JobContext):
         "message": "Say hello to begin your interactive Socratic SRE session."
     })
 
-    from livekit.agents.voice import AgentSession
     session = AgentSession()
     session.start(agent, room=ctx.room)
 
