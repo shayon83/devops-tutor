@@ -67,6 +67,13 @@ export default function App() {
         if (track.kind === Track.Kind.Audio) {
           const audioEl = track.attach();
           document.body.appendChild(audioEl);
+          audioEl.play().catch(e => console.warn('Audio autoplay warning:', e));
+        }
+      });
+
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (track.kind === Track.Kind.Audio) {
+          track.detach().forEach(el => el.remove());
         }
       });
 
@@ -84,7 +91,7 @@ export default function App() {
       });
 
       await room.connect(data.livekit_url, data.token);
-      await room.localParticipant.enableMicrophone();
+      await room.localParticipant.setMicrophoneEnabled(true);
 
       setIsConnected(true);
       setTranscripts([

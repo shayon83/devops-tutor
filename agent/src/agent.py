@@ -56,8 +56,9 @@ async def entrypoint(ctx: JobContext):
         "message": "Say hello to begin your interactive Socratic SRE session."
     })
 
-    if hasattr(agent, "start"):
-        agent.start(ctx.room)
+    from livekit.agents.voice import AgentSession
+    session = AgentSession()
+    session.start(agent, room=ctx.room)
 
     logger.info("Agent session active and listening...")
 
