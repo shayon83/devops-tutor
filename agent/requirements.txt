@@ -4,6 +4,6 @@ livekit-plugins-deepgram
 livekit-plugins-elevenlabs
 livekit-plugins-silero
 redis==5.0.4
-prometheus-client==0.20.0
+prometheus-client>=0.22.0
 python-dotenv==1.0.1
 pytest==8.2.2
