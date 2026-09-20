@@ -55,7 +55,7 @@ async def entrypoint(ctx: JobContext):
     })
 
     session = AgentSession()
-    session.start(agent, room=ctx.room)
+    await session.start(agent, room=ctx.room)
 
     logger.info("Agent session active and listening...")
 
