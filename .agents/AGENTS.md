@@ -1,37 +1,70 @@
-# DevOps LLM Voice Tutor - AGY Agent Context & Workspace Rules
+# DevOps Voice Tutor - agent context & workspace rules
 
-This repository contains the **DevOps LLM Voice Tutor**, an assessment-ready real-time WebRTC voice application built with LiveKit, FastAPI, Redis, React + Vite, and a Prometheus/Loki/Grafana telemetry stack.
+This repository contains the **DevOps Voice Tutor**, a real-time WebRTC voice
+tutoring application built with LiveKit Agents, FastAPI, Redis, React + Vite,
+and a Prometheus/Loki/Grafana telemetry stack.
 
-## Architecture Overview & 2D Matrix Configuration
+## Architecture
 
-The agent worker architecture is governed by a **2D Orthogonal Settings Matrix**:
+The voice pipeline is a **cascade**: STT → LLM → TTS, with every hop served by
+**LiveKit Inference** (`from livekit.agents import inference`). There is no
+speech-to-speech mode, no bring-your-own-key path, and no dispatch toggle --
+the agent worker runs in the compose stack and registers with LiveKit Cloud
+using `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
 
-1. **`VOICE_PIPELINE_MODE`** (`realtime` | `modular`)
-   - `realtime`: Direct Speech-to-Speech (S2S) multimodal audio session via Azure OpenAI or standard OpenAI Realtime WebRTC model (~350ms latency).
-   - `modular`: Cascaded pipeline using Silero VAD + Deepgram STT + LLM (GPT-4o-mini/Gemini) + ElevenLabs/OpenAI TTS.
+Model IDs are configurable from `.env`:
 
-2. **`AGENT_DISPATCH_TYPE`** (`local` | `cloud`)
-   - `local`: Self-hosted agent worker running inside local Docker Compose or `.venv` container listening for SFU job assignments.
-   - `cloud`: Serverless agent worker dispatched via LiveKit Cloud Agents infrastructure.
+| Variable | Default |
+| --- | --- |
+| `STT_MODEL` | `deepgram/flux-general-en` |
+| `LLM_MODEL` | `openai/gpt-4o-mini` |
+| `TTS_MODEL` | `cartesia/sonic-3` |
 
-## Environment & Run Commands
+**Verify LiveKit APIs and model IDs against the installed SDK**
+(`site-packages/livekit/agents/...`, currently `livekit-agents==1.8.2`) and
+<https://docs.livekit.io>, not from memory. Guessed model names and guessed
+APIs are the single largest source of defects this repository has had.
+`agent/tests/test_factory.py` asserts each default model ID is a member of the
+SDK's model literals, so a guess fails CI.
 
-- **Python Virtualenv**: `.venv` (Python 3.10 required due to PyO3 compatibility).
-- **Environment File**: `.env` (loaded strictly via `dotenv`, zero hardcoded secrets).
-- **Local Multi-Container Stack**: `docker compose up --build`
-- **Backend API Tests**: `pytest backend/tests/` (Redis calls wrapped for offline test resilience).
-- **Agent Factory Tests**: `pytest agent/tests/`
+## Environment & run commands
 
-## Core Directory Structure
+- **Environment file**: `.env` (loaded via `dotenv`, zero hardcoded secrets).
+  Every variable the code reads must appear in `.env.example`.
+- **Full stack**: `docker compose up --build`
+- **Tests**: `pip install -r requirements-dev.txt && docker compose up -d redis && pytest -q`
+  The suite talks to a real Redis and **fails** (never skips) without one.
+- **Lint**: `ruff check .` and `hadolint` on the three Dockerfiles.
+- **CI**: `.github/workflows/ci.yml` runs lint, test, build, smoke and an
+  optional secrets-gated live-agent job on every pull request.
 
-- `backend/`: FastAPI token issuer (`POST /api/token`), session management (`/api/session/*`), and Redis repository.
-- `agent/`: LiveKit Agent worker, `VoicePipelineFactory`, Socratic SRE prompts, and `DataTrack` visual card/diagram emitter.
-- `frontend/`: React + Vite SPA featuring visual workspace (Mermaid.js SVG rendering + YAML cards) and CSAT feedback modal.
-- `monitoring/`: Prometheus (`8000`, `8001`, LiveKit SFU scrape targets), Loki, Promtail, and Grafana dashboard provisioning (port `3001`).
-- `openspec/`: OpenSpec spec-driven SDD harness with master specification at `openspec/specs/devops-voice-tutor/spec.md`.
+## Directory structure
 
-## OpenSpec SDD Workflow Rules for AGY
+- `backend/`: FastAPI token issuer (`POST /api/token`), session endpoints
+  (`/api/session/*`), `/health`, `/ready`, `/metrics`. Fails fast when LiveKit
+  configuration is missing or still holds a placeholder.
+- `agent/`: LiveKit Agents worker. `factory.py` builds the tutor agent,
+  `visual_tags.py` is the streaming tag parser, `metrics.py` holds the
+  Prometheus metrics, `tutor_prompts.py` the Socratic system prompt.
+- `shared/state/`: the Redis key layout plus the sync (backend) and async
+  (agent) repositories. Both images copy this package; it is the contract
+  between the two services, so change it in one place.
+- `frontend/`: React + Vite SPA. Mermaid rendering, YAML preview, transcript
+  panel and the CSAT modal. The start button reads **"Start Voice Lesson"**.
+- `monitoring/`: Prometheus (scrapes `backend:8000` and `agent:8001` only --
+  LiveKit Cloud exposes no scrape endpoint), Loki, Promtail and Grafana
+  provisioning. Grafana is published on port **3001**.
+- `openspec/`: OpenSpec artifacts, master specification at
+  `openspec/specs/devops-voice-tutor/spec.md`.
 
-- **Specification Source of Truth**: Always consult `openspec/specs/devops-voice-tutor/spec.md` before making architectural or spec changes.
-- **Proposing Changes**: Use `/opsx-propose` or `openspec new change <name>`.
-- **Applying & Syncing**: Use `/opsx-apply` and `openspec archive <name>` to sync deltas into master specs.
+## OpenSpec SDD workflow rules
+
+- **Source of truth**: consult `openspec/specs/devops-voice-tutor/spec.md`
+  before making architectural changes.
+- **Proposing**: `/opsx-propose` or `openspec new change <name>`.
+- **Applying & syncing**: `/opsx-apply`, then `openspec archive <name>` to fold
+  the delta into the master spec.
+- A change that removes a capability must carry a `## REMOVED Requirements`
+  section. The `simplify-app-architecture` change dropped `VOICE_PIPELINE_MODE`
+  and `AGENT_DISPATCH_TYPE` from the code but not from the spec, and the stale
+  requirements survived for two more changes.

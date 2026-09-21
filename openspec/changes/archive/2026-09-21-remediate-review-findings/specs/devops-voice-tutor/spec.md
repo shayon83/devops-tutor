@@ -1,9 +1,6 @@
-# devops-voice-tutor Specification
+# Spec Delta
 
-## Purpose
-Provides a real-time DevOps voice tutoring web application powered by LiveKit WebRTC, a cascaded STT → LLM → TTS pipeline served by LiveKit Inference, Redis as the conversation store, and a Prometheus/Loki/Grafana telemetry stack.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Real-Time WebRTC Audio Session Initialization
 The system SHALL issue secure LiveKit JWT tokens and establish a bidirectional WebRTC audio session between the user's browser and the LiveKit Agent worker, using credentials loaded strictly from `.env`. The backend SHALL generate the room name and participant identity, and SHALL fail at startup when a LiveKit credential is missing or still set to its `.env.example` placeholder.
@@ -106,6 +103,8 @@ The system SHALL provide a `docker-compose.yml` that builds and orchestrates `fr
 - **WHEN** the stack is started from a fresh clone with no override file present
 - **THEN** no application source is bind-mounted over an image, so what runs is what was built.
 
+## ADDED Requirements
+
 ### Requirement: Continuous Integration Verification
 The system SHALL provide a GitHub Actions pipeline that, on every pull request and push to `main`, lints the code and Dockerfiles, runs the test suite against a real Redis, builds every compose image from a clean checkout, and smoke-tests the running stack.
 
@@ -116,3 +115,10 @@ The system SHALL provide a GitHub Actions pipeline that, on every pull request a
 #### Scenario: Smoke test asserts the stack is actually working
 - **WHEN** the `smoke` job brings the stack up with dummy credentials
 - **THEN** it asserts backend `/health` and `/ready` return 200, that an issued token's session appears in Redis, that the frontend serves the SPA, that no Prometheus target except the agent is down, that Grafana is healthy with the dashboard provisioned, and that the agent image can import its entrypoint and construct the Agent.
+
+## REMOVED Requirements
+
+### Requirement: Agent Worker Dispatch and Deployment Target Control
+**Reason**: `AGENT_DISPATCH_TYPE` was removed from the code in the `simplify-app-architecture` change but survived in the master spec, along with the BYOK and `VOICE_PIPELINE_MODE` scenarios under "Socratic DevOps Voice Interaction and Dual-Pipeline Support". Nothing reads those variables.
+
+**Migration**: None. The agent worker runs in the compose stack and registers with LiveKit Cloud using `LIVEKIT_URL`/`LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`; there is no dispatch or pipeline toggle.

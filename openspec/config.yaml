@@ -2,8 +2,12 @@ schema: spec-driven
 
 # Project context
 context: |
-  DevOps LLM Voice Tutor Web Application
-  - Stack: LiveKit Agents WebRTC, FastAPI, Redis 7, React + Vite, Prometheus, Loki, Grafana
-  - Architecture: 2D Orthogonal Matrix (VOICE_PIPELINE_MODE=realtime|modular, AGENT_DISPATCH_TYPE=local|cloud)
-  - Persona: Socratic SRE Tutor with real-time WebRTC DataTrack visual workspace (Mermaid.js + YAML cards)
-  - Deployment: Single-command Docker Compose (`docker compose up --build`), zero hardcoded secrets (.env)
+  DevOps Voice Tutor web application
+  - Stack: LiveKit Agents (WebRTC), FastAPI, Redis 7, React + Vite, Prometheus, Loki, Grafana
+  - Voice pipeline: cascaded STT -> LLM -> TTS, every hop served by LiveKit Inference
+  - Persona: Socratic SRE tutor with a live visual workspace (Mermaid diagrams + YAML cards)
+    published over the WebRTC data channel on the `visual` topic
+  - State: Redis is the conversation store (`session:<room>:metadata|history|feedback`),
+    shared between the backend and the agent via `shared/state/`
+  - Deployment: single-command Docker Compose (`docker compose up --build`), zero
+    hardcoded secrets (everything from `.env`), verified by GitHub Actions CI
