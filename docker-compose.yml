@@ -22,6 +22,9 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    # Explicit tag so CI can build these with buildx/bake (sharing a
+    # GitHub Actions layer cache) and then `docker compose up` the same images.
+    image: devops-tutor-backend:local
     container_name: devops-tutor-backend
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -49,6 +52,9 @@ services:
     build:
       context: .
       dockerfile: agent/Dockerfile
+    # Explicit tag so CI can build these with buildx/bake (sharing a
+    # GitHub Actions layer cache) and then `docker compose up` the same images.
+    image: devops-tutor-agent:local
     container_name: devops-tutor-agent
     # Prometheus scrapes this over the compose network; published so a reviewer
     # can curl it locally. No healthcheck: the worker's health is its
@@ -71,6 +77,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
+    image: devops-tutor-frontend:local
     container_name: devops-tutor-frontend
     ports:
       - "${FRONTEND_PORT:-3000}:80"
