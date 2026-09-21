@@ -1,5 +1,7 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -9,118 +11,239 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 100,
       "title": "Voice Session & Learner Experience KPIs",
       "type": "row"
     },
     {
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
       "id": 1,
       "title": "Active Tutoring Sessions",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "devops-tutor-prometheus"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "blue", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         }
       },
       "targets": [
-        { "expr": "voice_tutor_active_sessions_total", "legendFormat": "Sessions" }
+        {
+          "expr": "voice_tutor_active_sessions_total",
+          "legendFormat": "Sessions",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        }
       ]
     },
     {
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
       "id": 2,
       "title": "Average Learner CSAT Rating",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "devops-tutor-prometheus"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "max": 5,
           "min": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 3.0 },
-              { "color": "yellow", "value": 4.0 },
-              { "color": "green", "value": 4.5 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 3.0
+              },
+              {
+                "color": "yellow",
+                "value": 4.0
+              },
+              {
+                "color": "green",
+                "value": 4.5
+              }
             ]
           },
           "unit": "short"
         }
       },
       "targets": [
-        { "expr": "avg(voice_tutor_csat_rating_stars)", "legendFormat": "Stars (1-5)" }
+        {
+          "expr": "sum(voice_tutor_csat_rating_stars_sum) / clamp_min(sum(voice_tutor_csat_rating_stars_count), 1)",
+          "legendFormat": "Stars (1-5)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        }
       ]
     },
     {
-      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
       "id": 3,
       "title": "Barge-in Interruptions",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "devops-tutor-prometheus"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 10 },
-              { "color": "red", "value": 50 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
             ]
           }
         }
       },
       "targets": [
-        { "expr": "sum(voice_tutor_interruptions_total)", "legendFormat": "Interruptions" }
+        {
+          "expr": "sum(voice_tutor_interruptions_total)",
+          "legendFormat": "Interruptions",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        }
       ]
     },
     {
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
       "id": 4,
-      "title": "Service Component Health",
+      "title": "Scrape Targets Up (backend + agent)",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "devops-tutor-prometheus"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
-          }
+          },
+          "max": 2,
+          "min": 0
         }
       },
       "targets": [
-        { "expr": "sum(up)", "legendFormat": "Up Targets" }
+        {
+          "expr": "sum(up{job=~\"devops-tutor-.*\"})",
+          "legendFormat": "Up Targets",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        }
       ]
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
       "id": 200,
       "title": "Voice Latency Waterfall & Performance",
       "type": "row"
     },
     {
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
       "id": 5,
       "title": "End-to-End Voice Latency (ms)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "devops-tutor-prometheus"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -131,50 +254,121 @@
         }
       },
       "targets": [
-        { "expr": "histogram_quantile(0.99, sum(rate(voice_tutor_e2e_latency_ms_bucket[5m])) by (le))", "legendFormat": "p99 Latency" },
-        { "expr": "histogram_quantile(0.95, sum(rate(voice_tutor_e2e_latency_ms_bucket[5m])) by (le))", "legendFormat": "p95 Latency" },
-        { "expr": "histogram_quantile(0.50, sum(rate(voice_tutor_e2e_latency_ms_bucket[5m])) by (le))", "legendFormat": "p50 Latency" }
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(voice_tutor_e2e_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "p99 Latency",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(voice_tutor_e2e_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "p95 Latency",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(voice_tutor_e2e_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "p50 Latency",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        }
       ]
     },
     {
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
       "id": 6,
       "title": "HTTP API Request Latency (seconds)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "devops-tutor-prometheus"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "s"
         }
       },
       "targets": [
-        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95 Duration" },
-        { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50 Duration" }
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 Duration",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50 Duration",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        }
       ]
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
       "id": 300,
       "title": "Backend Throughput & API Metrics",
       "type": "row"
     },
     {
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 16
+      },
       "id": 7,
       "title": "API Request Throughput (RPS)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "devops-tutor-prometheus"
+      },
       "targets": [
-        { "expr": "sum(rate(http_requests_total[1m])) by (handler, status)", "legendFormat": "{{handler}} ({{status}})" }
+        {
+          "expr": "sum(rate(http_requests_total[1m])) by (handler, status)",
+          "legendFormat": "{{handler}} ({{status}})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        }
       ]
     },
     {
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
       "id": 8,
       "title": "HTTP 5xx Error Rate (%)",
       "type": "gauge",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "devops-tutor-prometheus"
+      },
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -182,31 +376,60 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 5 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
             ]
           },
           "unit": "percent"
         }
       },
       "targets": [
-        { "expr": "sum(rate(http_requests_total{status=~\"5..\"}[1m])) / sum(rate(http_requests_total[1m])) * 100", "legendFormat": "Error %" }
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[1m])) / sum(rate(http_requests_total[1m])) * 100",
+          "legendFormat": "Error %",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "devops-tutor-prometheus"
+          }
+        }
       ]
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
       "id": 400,
       "title": "Container Log Streams (Loki)",
       "type": "row"
     },
     {
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 25 },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
       "id": 9,
       "title": "Live Application Log Stream",
       "type": "logs",
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": {
+        "type": "loki",
+        "uid": "devops-tutor-loki"
+      },
       "options": {
         "enableLogDetails": true,
         "showLabels": true,
@@ -214,15 +437,29 @@
         "wrapLogMessage": true
       },
       "targets": [
-        { "expr": "{container_name=~\"devops-tutor-backend|devops-tutor-agent\"}", "legendFormat": "" }
+        {
+          "expr": "{container_name=~\"devops-tutor-backend|devops-tutor-agent\"}",
+          "legendFormat": "",
+          "datasource": {
+            "type": "loki",
+            "uid": "devops-tutor-loki"
+          }
+        }
       ]
     }
   ],
   "refresh": "5s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["devops", "voice-tutor", "telemetry"],
-  "time": { "from": "now-15m", "to": "now" },
+  "tags": [
+    "devops",
+    "voice-tutor",
+    "telemetry"
+  ],
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
   "title": "DevOps Voice Tutor Overview & Telemetry",
   "uid": "devops-tutor-overview"
 }
