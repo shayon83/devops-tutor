@@ -1,0 +1,36 @@
+# Build context is the repo root for the backend and agent images, so keep
+# everything that is not needed to install deps and copy source out of it.
+.git
+.github
+.gitignore
+.dockerignore
+
+# Secrets must never be baked into an image; they arrive via env_file at runtime.
+.env
+.env.local
+.env.*.local
+
+# Local toolchain / caches
+.venv
+venv
+env
+ENV
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+node_modules
+dist
+build
+*.log
+
+# Docs and planning artifacts, not needed by any image
+openspec
+.agents
+scripts
+monitoring
+README.md
+PROMPT.md
+workflow.md
+docker-compose.override.yml

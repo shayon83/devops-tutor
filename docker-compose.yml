@@ -1,11 +1,21 @@
-version: '3.8'
+# Single-command stack: `cp .env.example .env` (fill it in) then
+# `docker compose up --build`. Every image builds from this repo; nothing is
+# bind-mounted, so what runs is exactly what was built.
+name: devops-tutor
 
 services:
   redis:
     image: redis:7-alpine
     container_name: devops-tutor-redis
-    ports:
-      - "6379:6379"
+    # appendonly keeps the conversation store across a restart of the stack.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
   backend:
@@ -14,14 +24,25 @@ services:
       dockerfile: backend/Dockerfile
     container_name: devops-tutor-backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     env_file:
       - .env
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
   agent:
@@ -29,29 +50,39 @@ services:
       context: .
       dockerfile: agent/Dockerfile
     container_name: devops-tutor-agent
+    # Prometheus scrapes this over the compose network; published so a reviewer
+    # can curl it locally. No healthcheck: the worker's health is its
+    # registration with LiveKit Cloud, which needs real credentials.
     ports:
       - "8001:8001"
-    volumes:
-      - ./agent:/app/agent
     env_file:
       - .env
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
-      - redis
-      - backend
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
     container_name: devops-tutor-frontend
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
     restart: unless-stopped
 
   prometheus:
@@ -60,7 +91,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     restart: unless-stopped
 
   loki:
@@ -69,16 +100,18 @@ services:
     ports:
       - "3100:3100"
     volumes:
-      - ./monitoring/loki/loki-config.yaml:/etc/loki/local-config.yaml
+      - ./monitoring/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
     restart: unless-stopped
 
   promtail:
     image: grafana/promtail:2.8.2
     container_name: devops-tutor-promtail
+    # docker_sd_configs reads container logs through the Docker API, so the
+    # /var/lib/docker/containers bind mount is not needed (and breaks on
+    # Docker Desktop for Mac, where that path lives inside the VM).
     volumes:
-      - ./monitoring/promtail/promtail-config.yaml:/etc/promtail/config.yml
+      - ./monitoring/promtail/promtail-config.yaml:/etc/promtail/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/config.yml
     depends_on:
       - loki
@@ -90,12 +123,15 @@ services:
     ports:
       - "3001:3000"
     volumes:
-      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
-      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
     depends_on:
       - prometheus
       - loki
     restart: unless-stopped
+
+volumes:
+  redis-data:

@@ -1,0 +1,14 @@
+# Optional developer override -- NOT used by a fresh clone or by CI.
+#
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#
+# `docker-compose.override.yml` is gitignored, so it can never change what a
+# reviewer or the CI build job runs. It bind-mounts the agent source over the
+# image so `docker compose restart agent` picks up edits without a rebuild.
+# Remember that the image contents and the mounted source can then diverge:
+# rebuild before trusting anything you see.
+services:
+  agent:
+    volumes:
+      - ./agent:/app/agent:ro
+      - ./shared:/app/shared:ro
