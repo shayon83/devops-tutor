@@ -1,9 +1,9 @@
-fastapi==0.111.0
-uvicorn==0.30.1
-livekit-api>=0.8.0
-redis==5.0.4
-prometheus-client>=0.22.0
-pydantic==2.7.4
-python-dotenv==1.0.1
-httpx==0.27.0
-pytest==8.2.2
+# Runtime dependencies for the FastAPI backend. Exact pins keep the image
+# build reproducible from a clean checkout with no local wheel cache.
+fastapi==0.141.1
+uvicorn==0.53.0
+livekit-api==1.2.1
+redis==8.1.0
+prometheus-client==0.26.0
+pydantic==2.13.5
+python-dotenv==1.2.3
