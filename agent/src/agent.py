@@ -1,123 +1,155 @@
-import os
-import sys
-import time
+"""LiveKit agent worker for the DevOps voice tutor.
+
+One job == one tutoring session. The job reads the learner's chosen subject
+from Redis, greets them, and records every conversation turn back to Redis.
+"""
+
+from __future__ import annotations
+
+import asyncio
 import json
 import logging
-import asyncio
+import os
+from collections.abc import Callable, Coroutine
+from typing import Any
+
 from dotenv import load_dotenv
-
-# Ensure root import paths work
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
-from prometheus_client import start_http_server, Histogram, Counter
 from livekit import rtc
 from livekit.agents import JobContext, WorkerOptions, cli
+from livekit.agents.llm import ChatMessage
 from livekit.agents.voice import AgentSession
+from livekit.agents.voice.events import ConversationItemAddedEvent
 
-from backend.src.session_manager import RedisSessionRepository
+from agent.src import metrics
 from agent.src.factory import VoiceAgentFactory
+from agent.src.tutor_prompts import GREETING_INSTRUCTIONS
+from agent.src.visual_tags import VisualTag
+from shared.state import AsyncRedisSessionRepository
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("agent")
 
-# Prometheus Metrics
-VOICE_TURN_LATENCY = Histogram(
-    "voice_tutor_e2e_latency_ms",
-    "End-to-End Voice Response Latency in Milliseconds",
-    buckets=[100, 250, 350, 500, 750, 1000, 1500, 2000]
-)
-INTERRUPTION_COUNTER = Counter("voice_tutor_interruptions_total", "Total Barge-in Interruptions")
+#: Data messages are published under this topic so the browser can tell visual
+#: payloads apart from anything else on the room's data channel.
+VISUAL_DATA_TOPIC = "visual"
 
-redis_host = os.getenv("REDIS_HOST", "localhost")
-redis_port = int(os.getenv("REDIS_PORT", 6379))
-redis_repo = RedisSessionRepository(host=redis_host, port=redis_port)
+AGENT_METRICS_PORT = 8001
 
-def parse_and_strip_tags(text: str):
-    clean_text = []
-    tags = []
-    i = 0
-    n = len(text)
-    while i < n:
-        if text[i:i+9] == '[DIAGRAM:' or text[i:i+6] == '[YAML:' or text[i:i+6] == '[CARD:':
-            start = i
-            colon_idx = text.find(':', start)
-            tag_type = text[start+1:colon_idx].strip().lower()
-            depth = 0
-            j = start
-            while j < n:
-                if text[j] == '[':
-                    depth += 1
-                elif text[j] == ']':
-                    depth -= 1
-                    if depth == 0:
-                        content = text[colon_idx+1:j].strip()
-                        tags.append((tag_type, content))
-                        i = j + 1
-                        break
-                j += 1
-            else:
-                i += 1
-        else:
-            clean_text.append(text[i])
-            i += 1
-    return ''.join(clean_text).strip(), tags
+Spawn = Callable[[Coroutine[Any, Any, Any]], None]
 
-async def entrypoint(ctx: JobContext):
-    logger.info(f"Agent joining room: {ctx.room.name} [LiveKit Cloud Managed Inference]")
-    await ctx.connect()
 
-    agent = VoiceAgentFactory.create_agent()
-    
-    # Send visual payload via DataTrack
-    async def send_visual_card(data_dict: dict):
+def make_visual_publisher(room: rtc.Room) -> Callable[[VisualTag], Coroutine[Any, Any, None]]:
+    """Publishes one visual tag to the room's data channel."""
+
+    async def publish(tag: VisualTag) -> None:
+        payload = json.dumps(tag.to_payload()).encode("utf-8")
         try:
-            payload = json.dumps(data_dict).encode("utf-8")
-            await ctx.room.local_participant.publish_data(payload, reliable=True)
-        except Exception as e:
-            logger.warning(f"Data track publish error: {e}")
+            await room.local_participant.publish_data(
+                payload, reliable=True, topic=VISUAL_DATA_TOPIC
+            )
+        except Exception as exc:  # noqa: BLE001 - a dropped visual must not end the lesson
+            logger.warning("Could not publish %s visual: %s", tag.type, exc)
 
-    async def visual_tag_transform(text_stream):
-        chunks = []
-        async for chunk in text_stream:
-            chunks.append(chunk)
-        
-        full_text = "".join(chunks)
-        clean_text, tags = parse_and_strip_tags(full_text)
+    return publish
 
-        for tag_type, content in tags:
-            if tag_type == "diagram":
-                asyncio.create_task(send_visual_card({"type": "diagram", "content": content}))
-            elif tag_type == "yaml":
-                asyncio.create_task(send_visual_card({"type": "yaml", "content": content}))
-            elif tag_type == "card":
-                parts = content.split("|", 1)
-                title = parts[0].strip() if len(parts) > 0 else "Key Concept"
-                msg = parts[1].strip() if len(parts) > 1 else content
-                asyncio.create_task(send_visual_card({"type": "card", "title": title, "message": msg}))
 
-        yield clean_text
+def make_turn_recorder(
+    session_id: str,
+    repository: AsyncRedisSessionRepository,
+    spawn: Spawn,
+) -> Callable[[ConversationItemAddedEvent], None]:
+    """Builds the `conversation_item_added` handler.
 
-    await asyncio.sleep(1)
-    await send_visual_card({
-        "type": "welcome",
-        "title": "Welcome to DevOps Voice Tutor!",
-        "message": "Say hello to begin your interactive Socratic SRE session."
-    })
+    Persists each user/assistant turn to `session:<room>:history` and records
+    the turn metrics the dashboard plots. The handler itself is synchronous
+    (the SDK emits events synchronously), so the Redis write is handed to
+    `spawn`, which keeps a reference to the resulting task.
+    """
 
-    session = AgentSession(
-        tts_text_transforms=[visual_tag_transform, "filter_markdown", "filter_emoji"]
+    def on_conversation_item(event: ConversationItemAddedEvent) -> None:
+        item = event.item
+        # Agent handoffs also arrive on this event; they are not turns.
+        if not isinstance(item, ChatMessage) or item.role not in ("user", "assistant"):
+            return
+
+        if item.role == "assistant":
+            latency_seconds = item.metrics.get("e2e_latency")
+            if latency_seconds is not None:
+                metrics.E2E_LATENCY_MS.observe(latency_seconds * 1000)
+            if item.interrupted:
+                metrics.INTERRUPTIONS.inc()
+
+        text = (item.text_content or "").strip()
+        if not text:
+            return
+
+        spawn(
+            repository.append_turn(
+                session_id,
+                role=item.role,
+                text=text,
+                interrupted=item.interrupted,
+                timestamp=item.created_at,
+            )
+        )
+
+    return on_conversation_item
+
+
+async def entrypoint(ctx: JobContext) -> None:
+    await ctx.connect()
+    room_name = ctx.room.name
+    logger.info("Agent joined room %s", room_name)
+
+    repository = AsyncRedisSessionRepository(
+        host=os.getenv("REDIS_HOST", "localhost"),
+        port=int(os.getenv("REDIS_PORT", "6379")),
     )
+
+    # Strong references, so a Redis write is never garbage-collected mid-flight.
+    pending: set[asyncio.Task[Any]] = set()
+
+    def spawn(coro: Coroutine[Any, Any, Any]) -> None:
+        task = asyncio.create_task(coro)
+        pending.add(task)
+        task.add_done_callback(pending.discard)
+
+    metrics.ACTIVE_SESSIONS.inc()
+
+    async def on_shutdown() -> None:
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        await repository.end_session(room_name)
+        await repository.aclose()
+        metrics.ACTIVE_SESSIONS.dec()
+        logger.info("Session %s ended", room_name)
+
+    ctx.add_shutdown_callback(on_shutdown)
+
+    subject = await repository.get_subject(room_name)
+    agent = VoiceAgentFactory.create_agent(
+        subject=subject,
+        visual_sink=make_visual_publisher(ctx.room),
+    )
+
+    session = AgentSession()
+    session.on("conversation_item_added", make_turn_recorder(room_name, repository, spawn))
+
     await session.start(agent, room=ctx.room)
 
-    logger.info("Agent session active and listening...")
+    # Speak first: otherwise the learner sits in silence not knowing whether
+    # the tutor connected.
+    await session.generate_reply(instructions=GREETING_INSTRUCTIONS)
+
 
 if __name__ == "__main__":
-    # Start Prometheus metric exporter on port 8001
-    try:
-        start_http_server(8001)
-        logger.info("Agent Prometheus metrics listening on http://0.0.0.0:8001/metrics")
-    except Exception as e:
-        logger.warning(f"Could not start metrics server: {e}")
-
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    cli.run_app(
+        WorkerOptions(
+            entrypoint_fnc=entrypoint,
+            # Exposes /metrics on this port and aggregates samples written by
+            # each job process into the multiprocess directory.
+            prometheus_port=AGENT_METRICS_PORT,
+            prometheus_multiproc_dir=metrics.PROMETHEUS_MULTIPROC_DIR,
+        )
+    )
