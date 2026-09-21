@@ -1,0 +1,303 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: pip install ruff==0.14.5
+
+      - name: ruff
+        run: ruff check --output-format=github .
+
+      - name: Validate docker compose with a dummy .env
+        run: |
+          ./scripts/ci-dummy-env.sh
+          docker compose config -q
+
+      - name: hadolint (backend)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile
+
+      - name: hadolint (agent)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: agent/Dockerfile
+
+      - name: hadolint (frontend)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            backend/requirements.txt
+            agent/requirements.txt
+
+      - name: Install pinned dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: pytest
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
+        run: pytest -q
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Write a dummy .env
+        run: ./scripts/ci-dummy-env.sh
+
+      # This is the job that catches a dependency conflict: a clean checkout
+      # with no local layer cache, resolving the pinned requirements from
+      # scratch. `.github/docker-bake.ci.hcl` only adds the GHA layer cache to
+      # the targets docker-compose.yml already defines.
+      - name: Build every compose image
+        run: |
+          docker buildx bake \
+            -f docker-compose.yml \
+            -f .github/docker-bake.ci.hcl \
+            --load
+
+      - name: Show image sizes
+        run: docker image ls 'devops-tutor-*'
+
+  smoke:
+    name: smoke
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Write a dummy .env
+        run: ./scripts/ci-dummy-env.sh
+
+      - name: Build images (warm GHA cache from the build job)
+        run: |
+          docker buildx bake \
+            -f docker-compose.yml \
+            -f .github/docker-bake.ci.hcl \
+            --load
+
+      - name: Start the stack
+        run: docker compose up -d --no-build
+
+      # The agent is deliberately excluded: with dummy credentials it cannot
+      # register with LiveKit Cloud, so it never becomes healthy.
+      - name: Wait for backend, frontend, Prometheus and Grafana
+        run: |
+          wait_for() {
+            local name=$1 url=$2
+            for _ in $(seq 1 60); do
+              if curl -fsS --max-time 5 "$url" >/dev/null 2>&1; then
+                echo "$name is up"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "::error::$name never became ready at $url"
+            return 1
+          }
+          wait_for backend   http://localhost:8000/health
+          wait_for frontend  http://localhost:3000/healthz
+          wait_for prometheus http://localhost:9090/-/ready
+          wait_for grafana   http://localhost:3001/api/health
+
+      - name: Backend /health and /ready return 200
+        run: |
+          curl -fsS -o /dev/null -w 'health=%{http_code}\n' http://localhost:8000/health
+          curl -fsS -o /dev/null -w 'ready=%{http_code}\n'  http://localhost:8000/ready
+          test "$(curl -fsS http://localhost:8000/ready | jq -r .redis)" = "true"
+
+      - name: A token is issued and its session lands in Redis
+        run: |
+          body=$(curl -fsS -X POST http://localhost:8000/api/token \
+                   -H 'Content-Type: application/json' \
+                   -d '{"subject":"Kubernetes & Container Orchestration"}')
+          echo "$body" | jq -e '.token | length > 20' >/dev/null
+          room=$(echo "$body" | jq -r .room_name)
+          echo "room=$room"
+
+          subject=$(docker compose exec -T redis \
+            redis-cli HGET "session:${room}:metadata" subject)
+          echo "subject in redis: $subject"
+          test "$subject" = "Kubernetes & Container Orchestration"
+
+          status=$(docker compose exec -T redis \
+            redis-cli HGET "session:${room}:metadata" status)
+          test "$status" = "active"
+
+      - name: Frontend serves the SPA on :3000
+        run: |
+          curl -fsS http://localhost:3000/ | tee /tmp/index.html >/dev/null
+          grep -q '<div id="root">' /tmp/index.html
+          grep -q 'DevOps Voice Tutor' /tmp/index.html
+
+      - name: Prometheus has no down targets except the agent
+        run: |
+          for _ in $(seq 1 15); do
+            targets=$(curl -fsS http://localhost:9090/api/v1/targets || echo '{}')
+            total=$(echo "$targets" | jq '[.data.activeTargets // [] | .[]] | length')
+            [ "${total:-0}" -ge 2 ] && break
+            sleep 2
+          done
+          echo "$targets" | jq -r '.data.activeTargets[] | "\(.labels.job)\t\(.health)"'
+
+          bad=$(echo "$targets" | jq -r '
+            [.data.activeTargets[]
+             | select(.labels.job != "devops-tutor-agent")
+             | select(.health != "up")
+             | .labels.job] | join(",")')
+          if [ -n "$bad" ]; then
+            echo "::error::Prometheus targets down: $bad"
+            exit 1
+          fi
+
+      - name: Grafana is healthy and the dashboard is provisioned
+        run: |
+          curl -fsS http://localhost:3001/api/health | jq -e '.database == "ok"' >/dev/null
+          auth="admin:ci-dummy-grafana-password"
+          curl -fsS -u "$auth" \
+            http://localhost:3001/api/dashboards/uid/devops-tutor-overview \
+            | jq -e '.dashboard.title | length > 0' >/dev/null
+          # The panels must resolve the datasource uids the provisioning sets.
+          curl -fsS -u "$auth" http://localhost:3001/api/datasources \
+            | jq -e '[.[].uid] | index("devops-tutor-prometheus") != null' >/dev/null
+          curl -fsS -u "$auth" http://localhost:3001/api/datasources \
+            | jq -e '[.[].uid] | index("devops-tutor-loki") != null' >/dev/null
+
+      - name: The agent image imports its entrypoint and builds the Agent
+        # Dummy credentials cannot register with LiveKit Cloud, so this checks
+        # what it can: the image's dependencies resolve, the entrypoint
+        # imports, and the Agent is constructible with the configured models.
+        run: |
+          docker compose run --rm --no-deps agent python -c "
+          from agent.src.agent import entrypoint
+          from agent.src.factory import VoiceAgentFactory
+          agent = VoiceAgentFactory.create_agent(subject='Kubernetes')
+          print('entrypoint:', entrypoint.__name__)
+          print('models:', agent.stt.model, agent.llm.model, agent.tts.model)
+          assert agent.instructions.find('Kubernetes') > 0
+          "
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  live-agent:
+    name: live-agent (optional)
+    runs-on: ubuntu-latest
+    needs: build
+    # Never on a fork PR: secrets are not available there anyway, and we do not
+    # want to hand a fork's code real credentials.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check whether LiveKit secrets are configured
+        id: guard
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+        run: |
+          if [ -z "$LIVEKIT_URL" ] || [ -z "$LIVEKIT_API_KEY" ] || [ -z "$LIVEKIT_API_SECRET" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::LIVEKIT_* repository secrets are not set; skipping the live agent check."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.guard.outputs.run == 'true'
+
+      - name: Write .env with the real credentials
+        if: steps.guard.outputs.run == 'true'
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+        run: |
+          ./scripts/ci-dummy-env.sh
+          sed -i "s|^LIVEKIT_URL=.*|LIVEKIT_URL=${LIVEKIT_URL}|" .env
+          sed -i "s|^LIVEKIT_API_KEY=.*|LIVEKIT_API_KEY=${LIVEKIT_API_KEY}|" .env
+          sed -i "s|^LIVEKIT_API_SECRET=.*|LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}|" .env
+
+      - name: Build images
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          docker buildx bake \
+            -f docker-compose.yml \
+            -f .github/docker-bake.ci.hcl \
+            --load
+
+      - name: The worker registers with LiveKit Cloud
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          docker compose up -d --no-build redis agent
+          for _ in $(seq 1 30); do
+            if docker compose logs --no-color agent 2>/dev/null | grep -q "registered worker"; then
+              echo "Worker registered with LiveKit Cloud."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::The agent did not register with LiveKit Cloud within 30s."
+          docker compose logs --no-color agent
+          exit 1
+
+      - name: Tear down
+        if: always() && steps.guard.outputs.run == 'true'
+        run: docker compose down -v --remove-orphans
