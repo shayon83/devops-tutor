@@ -22,3 +22,6 @@ __pycache__/
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Optional local dev override (see docker-compose.override.yml.example)
+docker-compose.override.yml
