@@ -1,9 +1,8 @@
-livekit-agents>=1.2.0
-livekit-plugins-openai
-livekit-plugins-deepgram
-livekit-plugins-elevenlabs
-livekit-plugins-silero
-redis==5.0.4
-prometheus-client>=0.22.0
-python-dotenv==1.0.1
-pytest==8.2.2
+# Runtime dependencies for the LiveKit agent worker.
+# Pinned to exact versions: an unpinned `livekit-agents` is what let a new
+# release drag in a conflicting prometheus-client and break the image build.
+# STT/LLM/TTS all run through LiveKit Inference, so no provider plugins are needed.
+livekit-agents==1.8.2
+redis==8.1.0
+prometheus-client==0.26.0
+python-dotenv==1.2.3
