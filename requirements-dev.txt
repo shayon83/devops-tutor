@@ -2,7 +2,7 @@
 # Deliberately NOT installed into the runtime images.
 -r backend/requirements.txt
 -r agent/requirements.txt
-pytest==8.4.2
+pytest==9.1.1
 pytest-asyncio==1.3.0
 pyjwt==2.14.0
 httpx2==2.13.0
