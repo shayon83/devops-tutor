@@ -16,7 +16,7 @@ export default function VisualWorkspace({ visualPayloads, transcripts }) {
 
   const diagramPayloads = visualPayloads.filter(p => p.type === 'diagram');
   const yamlPayload = [...visualPayloads].reverse().find(p => p.type === 'yaml');
-  const cardPayload = [...visualPayloads].reverse().find(p => p.type === 'card' || p.type === 'welcome');
+  const cardPayload = [...visualPayloads].reverse().find(p => p.type === 'card');
 
   // Auto-switch to the latest diagram whenever a new diagram arrives
   useEffect(() => {
