@@ -8,11 +8,19 @@ import time
 from typing import Any
 
 import redis
+from redis.backoff import ExponentialBackoff
 from redis.exceptions import RedisError
+from redis.retry import Retry
 
 from .keys import DEFAULT_SESSION_TTL_SECONDS, feedback_key, history_key, metadata_key
 
 logger = logging.getLogger(__name__)
+
+#: redis-py's default retry backs off for roughly ten seconds before giving
+#: up. That is far too long to hold a voice turn (or an API request) open, so
+#: retries are capped tightly: a healthy Redis never needs them, and an
+#: unreachable one should be reported as degraded quickly.
+_RETRY_POLICY = Retry(ExponentialBackoff(cap=0.2, base=0.02), retries=2)
 
 
 class RedisSessionRepository:
@@ -30,8 +38,20 @@ class RedisSessionRepository:
         port: int = 6379,
         db: int = 0,
         ttl_seconds: int = DEFAULT_SESSION_TTL_SECONDS,
+        connect_timeout: float = 2.0,
+        socket_timeout: float = 5.0,
     ) -> None:
-        self.client = redis.Redis(host=host, port=port, db=db, decode_responses=True)
+        # Bounded timeouts: an unreachable or wedged Redis should degrade
+        # quickly, not hold an API request (or a voice turn) open.
+        self.client = redis.Redis(
+            host=host,
+            port=port,
+            db=db,
+            decode_responses=True,
+            socket_connect_timeout=connect_timeout,
+            socket_timeout=socket_timeout,
+            retry=_RETRY_POLICY,
+        )
         self.ttl_seconds = ttl_seconds
 
     def ping(self) -> bool:
