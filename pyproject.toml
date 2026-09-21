@@ -1,0 +1,19 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "node_modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "C4", "BLE"]
+
+[tool.pytest.ini_options]
+# Makes `agent.*`, `backend.*` and `shared.*` importable without PYTHONPATH.
+pythonpath = ["."]
+testpaths = ["backend/tests", "agent/tests", "shared/tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error::DeprecationWarning:backend.*", "error::DeprecationWarning:agent.*"]
+
+[tool.ruff.lint.per-file-ignores]
+# The system prompt is one long literal; wrapping it would change the text.
+"agent/src/tutor_prompts.py" = ["E501"]
