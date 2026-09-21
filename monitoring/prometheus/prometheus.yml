@@ -2,6 +2,9 @@ global:
   scrape_interval: 5s
   evaluation_interval: 5s
 
+# LiveKit runs in LiveKit Cloud, which exposes no Prometheus scrape endpoint,
+# so there is no SFU target here. Voice-quality metrics come from the agent's
+# own instrumentation instead.
 scrape_configs:
   - job_name: 'devops-tutor-backend'
     static_configs:
@@ -10,7 +13,3 @@ scrape_configs:
   - job_name: 'devops-tutor-agent'
     static_configs:
       - targets: ['agent:8001']
-
-  - job_name: 'livekit-sfu'
-    static_configs:
-      - targets: ['livekit:7880']
