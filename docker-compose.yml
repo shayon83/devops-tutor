@@ -111,7 +111,7 @@ services:
     restart: unless-stopped
 
   promtail:
-    image: grafana/promtail:2.8.2
+    image: grafana/promtail:3.6.8
     container_name: devops-tutor-promtail
     # docker_sd_configs reads container logs through the Docker API, so the
     # /var/lib/docker/containers bind mount is not needed (and breaks on
