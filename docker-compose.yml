@@ -93,7 +93,7 @@ services:
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:v2.45.0
+    image: prom/prometheus:v3.14.0
     container_name: devops-tutor-prometheus
     ports:
       - "9090:9090"
