@@ -11,15 +11,31 @@ mermaid.initialize({
 
 export default function VisualWorkspace({ visualPayloads, transcripts }) {
   const mermaidRef = useRef(null);
+  const transcriptEndRef = useRef(null);
+  const [activeDiagramIdx, setActiveDiagramIdx] = React.useState(null);
+
+  const diagramPayloads = visualPayloads.filter(p => p.type === 'diagram');
+  const yamlPayload = [...visualPayloads].reverse().find(p => p.type === 'yaml');
+  const cardPayload = [...visualPayloads].reverse().find(p => p.type === 'card' || p.type === 'welcome');
+
+  // Auto-switch to the latest diagram whenever a new diagram arrives
+  useEffect(() => {
+    if (diagramPayloads.length > 0) {
+      setActiveDiagramIdx(diagramPayloads.length - 1);
+    }
+  }, [diagramPayloads.length]);
+
+  const activeDiagram = (activeDiagramIdx !== null && diagramPayloads[activeDiagramIdx])
+    ? diagramPayloads[activeDiagramIdx]
+    : [...visualPayloads].reverse().find(p => p.type === 'diagram');
 
   useEffect(() => {
     const renderDiagram = async () => {
-      const diagramPayload = visualPayloads.find(p => p.type === 'diagram');
-      if (diagramPayload && mermaidRef.current) {
+      if (activeDiagram && mermaidRef.current) {
         try {
           mermaidRef.current.removeAttribute('data-processed');
           const id = `mermaid-svg-${Date.now()}`;
-          const { svg } = await mermaid.render(id, diagramPayload.content);
+          const { svg } = await mermaid.render(id, activeDiagram.content);
           mermaidRef.current.innerHTML = svg;
         } catch (e) {
           console.warn("Mermaid render error:", e);
@@ -27,10 +43,11 @@ export default function VisualWorkspace({ visualPayloads, transcripts }) {
       }
     };
     renderDiagram();
-  }, [visualPayloads]);
+  }, [activeDiagram]);
 
-  const yamlPayload = visualPayloads.find(p => p.type === 'yaml');
-  const cardPayload = visualPayloads.find(p => p.type === 'card' || p.type === 'welcome');
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [transcripts]);
 
   return (
     <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', height: '100%', overflowY: 'auto' }}>
@@ -47,13 +64,42 @@ export default function VisualWorkspace({ visualPayloads, transcripts }) {
 
       {/* Mermaid Diagram Rendering Area */}
       <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--bg-card-border)', borderRadius: '10px', padding: '1rem', minHeight: '180px' }}>
-        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <Layout size={14} /> LIVE ARCHITECTURE DIAGRAM
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Layout size={14} /> LIVE ARCHITECTURE DIAGRAM
+          </div>
+
+          {/* Multi-diagram history tabs */}
+          {diagramPayloads.length > 1 && (
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              {diagramPayloads.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveDiagramIdx(idx)}
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '4px',
+                    border: '1px solid var(--bg-card-border)',
+                    background: activeDiagramIdx === idx ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.05)',
+                    color: activeDiagramIdx === idx ? '#000' : '#fff',
+                    fontWeight: activeDiagramIdx === idx ? 700 : 400,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Diagram {idx + 1}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
         <div ref={mermaidRef} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', overflowX: 'auto' }}>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            Architectural diagrams rendered automatically during voice conversation...
-          </p>
+          {!activeDiagram && (
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              Architectural diagrams rendered automatically during voice conversation...
+            </p>
+          )}
         </div>
       </div>
 
@@ -78,13 +124,14 @@ export default function VisualWorkspace({ visualPayloads, transcripts }) {
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No transcripts recorded yet.</p>
         ) : (
           transcripts.map((t, idx) => (
-            <div key={idx} style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+            <div key={t.id || idx} style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}>
               <strong style={{ color: t.role === 'tutor' ? 'var(--accent-cyan)' : 'var(--accent-emerald)' }}>
                 {t.role === 'tutor' ? 'Tutor' : 'You'}:
               </strong> {t.text}
             </div>
           ))
         )}
+        <div ref={transcriptEndRef} />
       </div>
     </div>
   );

@@ -79,10 +79,64 @@ export default function App() {
 
       room.on(RoomEvent.TranscriptionReceived, (transcriptions, participant) => {
         transcriptions.forEach(t => {
-          setTranscripts(prev => [
-            ...prev,
-            { role: participant?.identity?.startsWith('student') ? 'user' : 'tutor', text: t.text }
-          ]);
+          const rawText = t.text || '';
+          
+          // Strip out visual tags like [DIAGRAM: ...], [YAML: ...], [CARD: ...] from display transcript
+          let cleanedText = rawText;
+          let i = 0;
+          while (i < cleanedText.length) {
+            if (
+              cleanedText.slice(i, i + 9) === '[DIAGRAM:' ||
+              cleanedText.slice(i, i + 6) === '[YAML:' ||
+              cleanedText.slice(i, i + 6) === '[CARD:'
+            ) {
+              let depth = 0;
+              let j = i;
+              while (j < cleanedText.length) {
+                if (cleanedText[j] === '[') depth++;
+                else if (cleanedText[j] === ']') {
+                  depth--;
+                  if (depth === 0) {
+                    cleanedText = cleanedText.slice(0, i) + cleanedText.slice(j + 1);
+                    break;
+                  }
+                }
+                j++;
+              }
+              if (depth > 0) {
+                // Truncate unclosed tag at end of streaming buffer
+                cleanedText = cleanedText.slice(0, i);
+                break;
+              }
+            } else {
+              i++;
+            }
+          }
+          cleanedText = cleanedText.trim();
+          if (!cleanedText) return;
+
+          const role = participant?.identity?.startsWith('student') ? 'user' : 'tutor';
+          
+          setTranscripts(prev => {
+            if (prev.length === 0) {
+              return [{ id: `turn-${Date.now()}`, role, text: cleanedText }];
+            }
+
+            const lastItem = prev[prev.length - 1];
+
+            // If the last entry belongs to the SAME speaker role, update its text in-place
+            if (lastItem.role === role) {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                ...lastItem,
+                text: cleanedText
+              };
+              return updated;
+            }
+
+            // Otherwise, speaker role has changed: start a new speech turn line
+            return [...prev, { id: `turn-${Date.now()}`, role, text: cleanedText }];
+          });
         });
       });
 
@@ -95,7 +149,7 @@ export default function App() {
 
       setIsConnected(true);
       setTranscripts([
-        { role: 'tutor', text: `Welcome! Let's explore ${selectedSubject}. What aspect would you like to start with?` }
+        { id: 'tutor-welcome', role: 'tutor', text: `Welcome! Let's explore ${selectedSubject}. What aspect would you like to start with?`, final: true }
       ]);
     } catch (e) {
       console.error("Connection error:", e);

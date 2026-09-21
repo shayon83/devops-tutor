@@ -15,7 +15,7 @@ class VoiceAgentFactory:
             instructions=DEVOPS_TUTOR_SYSTEM_PROMPT,
             stt=inference.STT(model="deepgram/flux-general"),
             llm=inference.LLM(model="openai/gpt-4o-mini"),
-            tts=inference.TTS(model="elevenlabs/eleven-multilingual-v2")
+            tts=inference.TTS(model="cartesia/sonic")
         )
 
 # Retain backward compatibility alias
