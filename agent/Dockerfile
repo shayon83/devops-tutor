@@ -21,7 +21,7 @@ COPY agent/ ./agent/
 RUN useradd --create-home --uid 10001 agent \
     && mkdir -p /tmp/prometheus-multiproc \
     && chown -R agent:agent /app /tmp/prometheus-multiproc
-USER agent
+USER 10001
 
 EXPOSE 8001
 

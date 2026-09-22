@@ -14,7 +14,7 @@ COPY shared/ ./shared/
 COPY backend/ ./backend/
 
 RUN useradd --create-home --uid 10001 backend && chown -R backend:backend /app
-USER backend
+USER 10001
 
 EXPOSE 8000
 
