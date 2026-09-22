@@ -104,6 +104,25 @@ image so edits take effect on `docker compose restart agent`. Copy it to
 not committed: an override that compose loads automatically is how an image
 and the code it supposedly contains drift apart without anyone noticing.
 
+### Cutting a release
+
+Releases are manual and versioned with semver. From **Actions → Release → Run
+workflow**, pick a bump (`auto` derives it from the Conventional Commits since
+the last tag: a `!` or `BREAKING CHANGE:` gives a major, a `feat:` a minor,
+anything else a patch) and optionally tick *dry run* to see the version without
+tagging anything.
+
+The job refuses to release a commit whose CI is not green, and refuses to
+overwrite an existing tag. It creates an annotated `vX.Y.Z` tag and a GitHub
+release whose notes are generated from the PRs merged since the previous one.
+
+The bump logic lives in `scripts/next-version.sh` and is unit-tested in
+`scripts/tests/`, so you can check what the next version would be locally:
+
+```bash
+scripts/next-version.sh auto
+```
+
 ---
 
 ## Key design decisions & tradeoffs

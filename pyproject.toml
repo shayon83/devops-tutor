@@ -9,7 +9,7 @@ select = ["E", "F", "W", "I", "B", "UP", "C4", "BLE"]
 [tool.pytest.ini_options]
 # Makes `agent.*`, `backend.*` and `shared.*` importable without PYTHONPATH.
 pythonpath = ["."]
-testpaths = ["backend/tests", "agent/tests", "shared/tests"]
+testpaths = ["backend/tests", "agent/tests", "shared/tests", "scripts/tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error::DeprecationWarning:backend.*", "error::DeprecationWarning:agent.*"]

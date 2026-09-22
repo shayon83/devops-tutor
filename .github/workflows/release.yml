@@ -1,0 +1,107 @@
+name: Release
+
+# Manual only: merging to main should not cut a release on its own.
+# Run it from Actions -> Release -> Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump ("auto" derives it from Conventional Commits since the last tag)'
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+      dry_run:
+        description: 'Compute the version without tagging or publishing'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# Two releases racing would produce two tags off the same base version.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: tag and release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history and tags, or next-version.sh cannot find the last tag
+          # or read the commits since it.
+          fetch-depth: 0
+
+      - name: Refuse to release a commit CI has not passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "Releasing $sha"
+          conclusions=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
+            --jq '[.check_runs[] | select(.name != "tag and release") | .conclusion] | join(",")')
+          echo "check runs: ${conclusions:-<none>}"
+
+          if [ -z "$conclusions" ]; then
+            echo "::error::No CI checks found on $sha. Refusing to release an unverified commit."
+            exit 1
+          fi
+          if grep -qE 'failure|cancelled|timed_out' <<<"$conclusions"; then
+            echo "::error::CI is not green on $sha. Refusing to release."
+            exit 1
+          fi
+
+      - name: Compute the next version
+        id: version
+        run: |
+          version=$(scripts/next-version.sh '${{ inputs.bump }}')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Release v$version"
+            echo
+            echo "- bump: \`${{ inputs.bump }}\`"
+            echo "- commit: \`$(git rev-parse --short HEAD)\`"
+            echo "- dry run: \`${{ inputs.dry_run }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Refuse to overwrite an existing tag
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::$tag already exists."
+            exit 1
+          fi
+          echo "$tag is free"
+
+      - name: Create and push the tag
+        if: ${{ !inputs.dry_run }}
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+
+      - name: Create the GitHub release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+          # --generate-notes lists the PRs merged since the previous release.
+          gh release create "$tag" \
+            --title "$tag" \
+            --generate-notes \
+            --verify-tag
+
+      - name: Say what happened
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+          if [ '${{ inputs.dry_run }}' = 'true' ]; then
+            echo "Dry run: would have released $tag. Nothing was tagged or published."
+          else
+            echo "Released $tag"
+          fi
