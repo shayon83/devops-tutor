@@ -24,7 +24,10 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install ruff
-        run: pip install ruff==0.14.5
+        # Read the pin out of requirements-dev.txt rather than repeating it, so
+        # a Dependabot bump there cannot leave CI linting with an older ruff
+        # than contributors run locally.
+        run: pip install "$(grep '^ruff==' requirements-dev.txt)"
 
       - name: ruff
         run: ruff check --output-format=github .
