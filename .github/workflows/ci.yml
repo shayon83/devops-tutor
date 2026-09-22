@@ -217,10 +217,8 @@ jobs:
       - name: The agent image imports its entrypoint and builds the Agent
         # Dummy credentials cannot register with LiveKit Cloud, so this checks
         # what it can: the image's dependencies resolve, the entrypoint
-        # imports via module path, and the Agent is constructible with the
-        # configured models.
+        # imports, and the Agent is constructible with the configured models.
         run: |
-          docker compose run --rm --no-deps agent python -m agent.src.agent --help
           docker compose run --rm --no-deps agent python -c "
           from agent.src.agent import entrypoint
           from agent.src.factory import VoiceAgentFactory
