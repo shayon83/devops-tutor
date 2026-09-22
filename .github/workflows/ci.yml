@@ -111,6 +111,52 @@ jobs:
       - name: Show image sizes
         run: docker image ls 'devops-tutor-*'
 
+      - name: Install Trivy
+        # The scanner is pinned and checksum-verified: installing a security
+        # gate unverified undercuts the point of having one. The vulnerability
+        # database it downloads at scan time is deliberately NOT pinned -- a
+        # scan against a stale database is worthless -- so this check is
+        # expected to vary over time as new CVEs are published.
+        env:
+          TRIVY_VERSION: "0.74.0"
+          TRIVY_SHA256: "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a"
+        run: |
+          asset="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL -o "$asset" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${asset}"
+          echo "${TRIVY_SHA256}  ${asset}" | sha256sum -c -
+          sudo tar -xzf "$asset" -C /usr/local/bin trivy
+          rm -f "$asset"
+          trivy --version
+
+      - name: Fail on HIGH or CRITICAL vulnerabilities
+        # --ignore-unfixed on purpose: Debian and Alpine base images routinely
+        # carry HIGH CVEs with no patched package available, and a gate that
+        # fails on something nobody can fix gets muted or removed. Every
+        # failure here has an action: bump the base image, or bump a pinned
+        # dependency.
+        # All three images are scanned in one step so a single run reports
+        # every offending image rather than stopping at the first.
+        run: |
+          failed=0
+          for service in backend agent frontend; do
+            image="devops-tutor-${service}:local"
+            echo "::group::trivy $image"
+            trivy image \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --ignore-unfixed \
+              --exit-code 1 \
+              --format table \
+              "$image" || failed=1
+            echo "::endgroup::"
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::HIGH or CRITICAL vulnerabilities with an available fix were found. See the groups above."
+            exit 1
+          fi
+          echo "No fixable HIGH or CRITICAL vulnerabilities in any image."
+
   smoke:
     name: smoke
     runs-on: ubuntu-latest

@@ -258,13 +258,14 @@ behind a load balancer.
 
 **Verified by CI on every pull request** (`.github/workflows/ci.yml`):
 ruff and hadolint pass; every compose image builds from a clean checkout with
-no local layer cache; the whole stack starts; backend `/health` and `/ready`
-return 200; a token is issued and its session appears in Redis with the right
-subject; the frontend serves the SPA; Prometheus has no down targets except the
-agent; Grafana is healthy with the dashboard and both datasource uids
-provisioned; the agent image imports its entrypoint and constructs the Agent
-with the configured models. The test job runs the full pytest suite against a
-real Redis service container.
+no local layer cache and is scanned with Trivy, which fails the build on any
+HIGH or CRITICAL vulnerability that has a fix available; the whole stack starts;
+backend `/health` and `/ready` return 200; a token is issued and its session
+appears in Redis with the right subject; the frontend serves the SPA; Prometheus
+has no down targets except the agent; Grafana is healthy with the dashboard and
+both datasource uids provisioned; the agent image imports its entrypoint and
+constructs the Agent with the configured models. The test job runs the full
+pytest suite against a real Redis service container.
 
 **Not verified by CI**: an actual voice conversation. CI has no LiveKit
 credentials, so the agent cannot register with LiveKit Cloud, audio never
