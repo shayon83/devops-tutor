@@ -25,4 +25,4 @@ USER agent
 
 EXPOSE 8001
 
-CMD ["python", "agent/src/agent.py", "start"]
+CMD ["python", "-m", "agent.src.agent", "start"]
