@@ -4,6 +4,6 @@
 -r agent/requirements.txt
 pytest==9.1.1
 pytest-asyncio==1.4.0
-pyjwt==2.14.0
+pyjwt==2.15.0
 httpx2==2.13.0
 ruff==0.16.8
