@@ -62,6 +62,56 @@ Separation of concerns:
 | UI | `frontend/` | React + Vite, served by nginx |
 | Telemetry | `monitoring/` | Prometheus, Loki, Promtail, Grafana provisioning |
 
+### Session Interaction Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Learner (Browser)
+    participant FE as React Frontend
+    participant BE as FastAPI Backend
+    participant Redis as Redis State Store
+    participant LK as LiveKit Cloud
+    participant Agent as LiveKit Agent Worker
+
+    Note over Agent, LK: Background: Agent registers with LiveKit Cloud & awaits job dispatches
+
+    rect rgb(240, 245, 255)
+        Note over User, BE: 1. Token & Session Setup
+        User->>FE: Selects subject & clicks "Start Voice Lesson"
+        FE->>BE: POST /api/token { subject: "Kubernetes" }
+        BE->>Redis: Create metadata: session:<id>:metadata (subject="Kubernetes")
+        BE-->>FE: Return LiveKit JWT Token & room_name
+    end
+
+    rect rgb(240, 255, 240)
+        Note over FE, Agent: 2. Room Connection & Agent Dispatch
+        FE->>LK: room.connect(livekit_url, token)
+        LK->>Agent: Dispatch room job (Room:ParticipantJoined)
+        Agent->>Redis: Read subject from session:<id>:metadata
+        Agent->>LK: Join room & speak voice greeting
+        LK-->>FE: Stream audio track (Tutor speaks)
+    end
+
+    rect rgb(245, 245, 245)
+        Note over FE, Agent: 3. Active Voice Lesson & Visual Data Streaming
+        FE->>LK: Stream user mic audio (STT -> LLM -> TTS)
+        Agent->>LK: Stream audio response
+        Agent->>LK: Publish visual diagram/YAML payload (topic="visual")
+        LK-->>FE: Render Mermaid diagram / YAML code in UI
+        Agent->>Redis: Append turn to session:<id>:history
+    end
+
+    rect rgb(255, 240, 240)
+        Note over User, Redis: 4. Session Termination & CSAT Feedback
+        User->>FE: Click "End Session" (Disconnect WebRTC)
+        Agent->>Redis: Mark status="ended" in session:<id>:metadata
+        FE->>BE: POST /api/session/{id}/feedback
+        BE->>Redis: Save CSAT rating in session:<id>:feedback
+    end
+```
+
+
 ---
 
 ## Quick start
