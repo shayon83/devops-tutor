@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # PYTHONUNBUFFERED keeps logs flowing to the Docker json log (and so to
 # Promtail -> Loki) instead of sitting in a buffer.
