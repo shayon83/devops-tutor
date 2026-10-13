@@ -68,3 +68,9 @@ SDK's model literals, so a guess fails CI.
   section. The `simplify-app-architecture` change dropped `VOICE_PIPELINE_MODE`
   and `AGENT_DISPATCH_TYPE` from the code but not from the spec, and the stale
   requirements survived for two more changes.
+
+## Git conventions
+
+- Work on a feature branch, never `main`.
+- Conventional Commits. Commit planning artifacts separately from code.
+- Open a PR with `gh pr create` and let CI verify it; never push to `main`.
