@@ -5,7 +5,7 @@ name: devops-tutor
 
 services:
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: devops-tutor-redis
     # appendonly keeps the conversation store across a restart of the stack.
     command: ["redis-server", "--appendonly", "yes"]
