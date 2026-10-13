@@ -253,3 +253,66 @@ def test_metrics_written_in_a_job_process_appear_in_the_parent_registry(tmp_path
 def test_multiproc_dir_matches_the_one_created_in_the_image():
     dockerfile = (REPO_ROOT / "agent" / "Dockerfile").read_text()
     assert metrics.PROMETHEUS_MULTIPROC_DIR in dockerfile
+
+
+def test_build_resume_greeting():
+    from agent.src.tutor_prompts import build_resume_greeting
+
+    greeting = build_resume_greeting("Kubernetes")
+    assert 'resuming where you left off on "Kubernetes"' in greeting
+
+
+async def test_generate_session_summary_rule_based_fallback():
+    from agent.src.agent import generate_session_summary
+
+    turns = [
+        {"role": "user", "text": "How do I troubleshoot crashloopbackoff?"},
+        {"role": "assistant", "text": "Check pod logs and exit codes."},
+    ]
+    summary = await generate_session_summary(None, turns, "Kubernetes")
+    assert summary == "Kubernetes: How do I troubleshoot crashloopbackoff?"
+
+
+async def test_generate_session_summary_llm():
+    from agent.src.agent import generate_session_summary
+
+    class FakeLLM:
+        def chat(self, *, chat_ctx, **kwargs):
+            async def gen():
+                yield llm.ChatChunk(
+                    id="chunk-1",
+                    delta=llm.ChoiceDelta(
+                        role="assistant", content="Troubleshooting Pod CrashLoopBackOff"
+                    ),
+                )
+
+            return gen()
+
+    turns = [
+        {"role": "user", "text": "Why is my pod crashing?"},
+        {"role": "assistant", "text": "Check the exit code and description."},
+    ]
+    summary = await generate_session_summary(FakeLLM(), turns, "Kubernetes")
+    assert summary == "Troubleshooting Pod CrashLoopBackOff"
+
+
+def test_chat_context_restoration():
+    from livekit.agents.llm import ChatContext
+
+    ctx = ChatContext()
+    turns = [
+        {"role": "user", "text": "What is an ingress?"},
+        {"role": "assistant", "text": "It routes external HTTP traffic into cluster services."},
+    ]
+    for turn in turns:
+        ctx.add_message(role=turn["role"], content=turn["text"])
+
+    messages = ctx.messages()
+    assert len(messages) == 2
+    assert messages[0].role == "user"
+    assert messages[0].content == ["What is an ingress?"]
+    assert messages[1].role == "assistant"
+    assert messages[1].content == [
+        "It routes external HTTP traffic into cluster services."
+    ]
+

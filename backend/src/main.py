@@ -73,9 +73,11 @@ async def record_request_metrics(request: Request, call_next):
 
 
 class TokenRequest(BaseModel):
-    # The room name and participant identity are generated server-side, so a
-    # client cannot name (or join) an arbitrary room.
+    # The room name and participant identity are generated server-side, or
+    # bound to a verified prior session if resume_session_id is provided.
     subject: str = Field(default="DevOps", min_length=1, max_length=80)
+    user_id: str | None = Field(default=None, max_length=128)
+    resume_session_id: str | None = Field(default=None, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -108,8 +110,21 @@ def readiness_check(response: Response):
 
 @app.post("/api/token", response_model=TokenResponse)
 def generate_livekit_token(req: TokenRequest):
-    room_name = f"devops-room-{uuid.uuid4().hex[:12]}"
-    participant_identity = f"student-{uuid.uuid4().hex[:8]}"
+    if req.resume_session_id:
+        meta = redis_repo.get_metadata(req.resume_session_id)
+        if not meta:
+            raise HTTPException(status_code=404, detail="Session not found or expired")
+        room_name = req.resume_session_id
+        participant_identity = (
+            req.user_id or meta.get("user_id") or f"student-{uuid.uuid4().hex[:8]}"
+        )
+        redis_repo.reactivate_session(room_name)
+    else:
+        room_name = f"devops-room-{uuid.uuid4().hex[:12]}"
+        participant_identity = req.user_id or f"student-{uuid.uuid4().hex[:8]}"
+        redis_repo.create_session(
+            session_id=room_name, user_id=participant_identity, subject=req.subject
+        )
 
     try:
         token = (
@@ -131,17 +146,24 @@ def generate_livekit_token(req: TokenRequest):
         logger.error("Error generating token: %s", exc)
         raise HTTPException(status_code=500, detail="Could not issue a LiveKit token") from exc
 
-    # The agent reads `subject` back out of this hash when the job starts.
-    redis_repo.create_session(
-        session_id=room_name, user_id=participant_identity, subject=req.subject
-    )
-
     return TokenResponse(
         token=jwt_token,
         livekit_url=settings.livekit_url,
         room_name=room_name,
         participant_identity=participant_identity,
     )
+
+
+@app.get("/api/sessions")
+def list_user_sessions(user_id: str):
+    if not user_id.strip():
+        raise HTTPException(status_code=400, detail="user_id query parameter is required")
+    sessions = redis_repo.get_user_sessions(user_id)
+    return {
+        "user_id": user_id,
+        "sessions": sessions,
+        "storage_available": redis_repo.ping(),
+    }
 
 
 @app.get("/api/session/{session_id}")

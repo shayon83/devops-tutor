@@ -1,7 +1,7 @@
 import React from 'react';
-import { Terminal, Shield, Cpu } from 'lucide-react';
+import { Terminal, History } from 'lucide-react';
 
-export default function Header({ isConnected, selectedSubject, setSelectedSubject }) {
+export default function Header({ isConnected, selectedSubject, setSelectedSubject, onOpenPastSessions }) {
   const subjects = [
     "Kubernetes & Container Orchestration",
     "CI/CD & GitOps Workflows",
@@ -23,6 +23,29 @@ export default function Header({ isConnected, selectedSubject, setSelectedSubjec
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <button
+          onClick={onOpenPastSessions}
+          disabled={isConnected}
+          style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            color: 'var(--text-main)',
+            border: '1px solid var(--bg-card-border)',
+            borderRadius: '8px',
+            padding: '0.5rem 0.85rem',
+            cursor: isConnected ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            opacity: isConnected ? 0.5 : 1
+          }}
+          title="View and resume previous tutoring sessions"
+        >
+          <History size={16} color="#00f2fe" />
+          Past Sessions
+        </button>
+
         <select 
           value={selectedSubject} 
           onChange={(e) => setSelectedSubject(e.target.value)}

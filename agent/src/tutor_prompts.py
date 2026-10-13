@@ -26,6 +26,24 @@ GREETING_INSTRUCTIONS = (
     "what they already know. Do not use a visual tag in this greeting."
 )
 
+#: Spoken when resuming a prior session with existing conversation history.
+RESUME_GREETING_INSTRUCTIONS = (
+    "Welcome the learner back warmly in one or two short sentences, acknowledging that "
+    "you are resuming where you left off on \"{subject}\". Refer briefly to the prior "
+    "discussion, and ask how they'd like to proceed. Do not use a visual tag in this greeting."
+)
+
+#: System instruction to generate a concise 1-line session summary.
+SUMMARY_PROMPT = (
+    "Summarize this DevOps tutoring discussion in 8 words or fewer as a concise session title, "
+    "without any quotes or terminal punctuation:"
+)
+
+
+def build_resume_greeting(subject: str | None = None) -> str:
+    return RESUME_GREETING_INSTRUCTIONS.format(subject=subject or "DevOps")
+
+
 
 def build_instructions(subject: str | None = None) -> str:
     """The system prompt, focused on the subject the learner picked.

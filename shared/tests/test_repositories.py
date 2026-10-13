@@ -13,10 +13,15 @@ from shared.state import (
     feedback_key,
     history_key,
     metadata_key,
+    user_sessions_key,
 )
 
 #: A port nothing listens on, to exercise the degraded paths for real.
 DEAD_REDIS_PORT = 6399
+
+
+def test_user_sessions_key():
+    assert user_sessions_key("student-123") == "user:student-123:sessions"
 
 
 def test_create_session_writes_metadata_with_a_ttl(redis_repository, session_id):
@@ -150,3 +155,56 @@ def test_connection_errors_are_absorbed_but_bugs_are_not(redis_repository, monke
     )
     with pytest.raises(TypeError):
         redis_repository.create_session("sid", "student", "Linux")
+
+
+def test_user_sessions_are_indexed_and_retrieved(redis_repository, session_id):
+    user_id = "student-test-indexing"
+    s1 = f"{session_id}-1"
+    s2 = f"{session_id}-2"
+    redis_repository.create_session(s1, user_id=user_id, subject="Docker")
+    redis_repository.create_session(s2, user_id=user_id, subject="Kubernetes")
+    redis_repository.append_turn(s2, "user", "How do pods communicate?")
+
+    sessions = redis_repository.get_user_sessions(user_id)
+    assert len(sessions) >= 2
+    session_ids = [s["session_id"] for s in sessions]
+    assert s2 in session_ids
+    assert s1 in session_ids
+    # s2 should be newer or equal to s1
+    s2_data = next(s for s in sessions if s["session_id"] == s2)
+    assert s2_data["subject"] == "Kubernetes"
+    assert s2_data["turns_count"] == 1
+    assert "Discussion on Kubernetes" in s2_data["summary"]
+
+
+def test_update_summary_and_reactivate(redis_repository, session_id):
+    user_id = "student-summary-test"
+    redis_repository.create_session(session_id, user_id=user_id, subject="Terraform")
+    redis_repository.update_summary(session_id, "Mastering Terraform State Locking")
+
+    meta = redis_repository.get_metadata(session_id)
+    assert meta["summary"] == "Mastering Terraform State Locking"
+
+    redis_repository.end_session(session_id)
+    assert redis_repository.get_metadata(session_id)["status"] == "ended"
+
+    assert redis_repository.reactivate_session(session_id) is True
+    assert redis_repository.get_metadata(session_id)["status"] == "active"
+
+
+async def test_async_user_sessions_indexing_and_summary(
+    redis_repository, async_redis_repository, session_id
+):
+    user_id = "student-async-indexing"
+    redis_repository.create_session(session_id, user_id=user_id, subject="Ansible")
+
+    await async_redis_repository.update_summary(session_id, "Automating configuration with Ansible")
+    meta = await async_redis_repository.get_metadata(session_id)
+    assert meta["summary"] == "Automating configuration with Ansible"
+
+    sessions = await async_redis_repository.get_user_sessions(user_id)
+    assert len(sessions) == 1
+    assert sessions[0]["session_id"] == session_id
+    assert sessions[0]["summary"] == "Automating configuration with Ansible"
+
+

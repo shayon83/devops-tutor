@@ -22,3 +22,9 @@ def history_key(session_id: str) -> str:
 def feedback_key(session_id: str) -> str:
     """Hash of the post-session CSAT rating, tags and comment."""
     return f"session:{session_id}:feedback"
+
+
+def user_sessions_key(user_id: str) -> str:
+    """Sorted set of session IDs for a user, scored by last updated timestamp."""
+    return f"user:{user_id}:sessions"
+
