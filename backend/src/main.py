@@ -18,7 +18,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from pydantic import BaseModel, Field
 
 from backend.src.config import settings
-from shared.state import RedisSessionRepository
+from shared.state import RedisSessionRepository, extract_session_id
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
@@ -85,6 +85,7 @@ class TokenResponse(BaseModel):
     livekit_url: str
     room_name: str
     participant_identity: str
+    session_id: str
 
 
 class FeedbackRequest(BaseModel):
@@ -111,19 +112,21 @@ def readiness_check(response: Response):
 @app.post("/api/token", response_model=TokenResponse)
 def generate_livekit_token(req: TokenRequest):
     if req.resume_session_id:
-        meta = redis_repo.get_metadata(req.resume_session_id)
+        session_id = extract_session_id(req.resume_session_id)
+        meta = redis_repo.get_metadata(session_id)
         if not meta:
             raise HTTPException(status_code=404, detail="Session not found or expired")
-        room_name = req.resume_session_id
+        room_name = f"{session_id}--call-{uuid.uuid4().hex[:8]}"
         participant_identity = (
             req.user_id or meta.get("user_id") or f"student-{uuid.uuid4().hex[:8]}"
         )
-        redis_repo.reactivate_session(room_name)
+        redis_repo.reactivate_session(session_id)
     else:
-        room_name = f"devops-room-{uuid.uuid4().hex[:12]}"
+        session_id = f"devops-room-{uuid.uuid4().hex[:12]}"
+        room_name = f"{session_id}--call-{uuid.uuid4().hex[:8]}"
         participant_identity = req.user_id or f"student-{uuid.uuid4().hex[:8]}"
         redis_repo.create_session(
-            session_id=room_name, user_id=participant_identity, subject=req.subject
+            session_id=session_id, user_id=participant_identity, subject=req.subject
         )
 
     try:
@@ -151,6 +154,7 @@ def generate_livekit_token(req: TokenRequest):
         livekit_url=settings.livekit_url,
         room_name=room_name,
         participant_identity=participant_identity,
+        session_id=session_id,
     )
 
 
@@ -168,12 +172,14 @@ def list_user_sessions(user_id: str):
 
 @app.get("/api/session/{session_id}")
 def get_session_summary(session_id: str):
-    return redis_repo.get_session_summary(session_id)
+    canonical_id = extract_session_id(session_id)
+    return redis_repo.get_session_summary(canonical_id)
 
 
 @app.post("/api/session/{session_id}/feedback")
 def submit_feedback(session_id: str, req: FeedbackRequest):
-    result = redis_repo.save_feedback(session_id, req.rating_stars, req.tags, req.comment)
+    canonical_id = extract_session_id(session_id)
+    result = redis_repo.save_feedback(canonical_id, req.rating_stars, req.tags, req.comment)
     CSAT_RATING.observe(req.rating_stars)
     return {"status": "success", "feedback": result}
 

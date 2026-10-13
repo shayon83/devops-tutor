@@ -316,3 +316,43 @@ def test_chat_context_restoration():
         "It routes external HTTP traffic into cluster services."
     ]
 
+
+def test_extract_session_id_in_agent():
+    from agent.src.agent import extract_session_id
+
+    assert extract_session_id("devops-room-abc--call-1234") == "devops-room-abc"
+    assert extract_session_id("devops-room-abc") == "devops-room-abc"
+    assert extract_session_id("") == ""
+
+
+async def test_agent_and_session_chat_context_synchronization():
+    from livekit.agents.llm import ChatContext
+    from livekit.agents.voice import AgentSession
+
+    from agent.src.factory import VoiceAgentFactory
+
+    agent = VoiceAgentFactory.create_agent(subject="Docker")
+    session = AgentSession()
+
+    turns = [
+        {"role": "user", "text": "What is Docker?"},
+        {"role": "assistant", "text": "It packages apps into lightweight containers."},
+    ]
+
+    restored_ctx = ChatContext()
+    for turn in turns:
+        session.history.add_message(role=turn["role"], content=turn["text"])
+        restored_ctx.add_message(role=turn["role"], content=turn["text"])
+    await agent.update_chat_ctx(restored_ctx)
+
+    session_messages = session.history.messages()
+    agent_messages = agent.chat_ctx.messages()
+
+    assert len(session_messages) == 2
+    assert len(agent_messages) == 2
+    assert agent_messages[0].role == "user"
+    assert agent_messages[0].content == ["What is Docker?"]
+    assert agent_messages[1].role == "assistant"
+    assert agent_messages[1].content == ["It packages apps into lightweight containers."]
+
+

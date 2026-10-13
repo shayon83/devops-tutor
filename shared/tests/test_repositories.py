@@ -208,3 +208,13 @@ async def test_async_user_sessions_indexing_and_summary(
     assert sessions[0]["summary"] == "Automating configuration with Ansible"
 
 
+def test_extract_session_id():
+    from shared.state import extract_session_id
+
+    assert extract_session_id("devops-room-123--call-456") == "devops-room-123"
+    assert extract_session_id("devops-room-123") == "devops-room-123"
+    assert extract_session_id("session-abc--call-xyz--extra") == "session-abc"
+    assert extract_session_id("") == ""
+
+
+

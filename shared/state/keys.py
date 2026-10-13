@@ -28,3 +28,8 @@ def user_sessions_key(user_id: str) -> str:
     """Sorted set of session IDs for a user, scored by last updated timestamp."""
     return f"user:{user_id}:sessions"
 
+
+def extract_session_id(room_name: str) -> str:
+    """Extracts canonical session ID from a room name (e.g. 'sess-123--call-456' -> 'sess-123')."""
+    return room_name.split("--")[0] if room_name else ""
+

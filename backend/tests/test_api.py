@@ -27,8 +27,10 @@ def issued_session(client, redis_repository):
     assert response.status_code == 200
     body = response.json()
     yield body
-    room = body["room_name"]
-    redis_repository.client.delete(metadata_key(room), history_key(room), feedback_key(room))
+    session_id = body.get("session_id", body["room_name"])
+    redis_repository.client.delete(
+        metadata_key(session_id), history_key(session_id), feedback_key(session_id)
+    )
 
 
 def test_health_is_liveness_only(client):
@@ -44,7 +46,8 @@ def test_ready_reports_that_redis_answers(client, redis_repository):
 
 
 def test_token_is_a_signed_jwt_for_a_server_generated_room(issued_session):
-    assert issued_session["room_name"].startswith("devops-room-")
+    assert issued_session["session_id"].startswith("devops-room-")
+    assert issued_session["room_name"].startswith(f"{issued_session['session_id']}--call-")
     assert issued_session["participant_identity"].startswith("student-")
 
     claims = jwt.decode(
@@ -59,12 +62,12 @@ def test_token_is_a_signed_jwt_for_a_server_generated_room(issued_session):
 
 
 def test_token_endpoint_writes_session_metadata_to_redis(issued_session, redis_repository):
-    stored = redis_repository.client.hgetall(metadata_key(issued_session["room_name"]))
+    stored = redis_repository.client.hgetall(metadata_key(issued_session["session_id"]))
 
     assert stored["subject"] == "Kubernetes & Container Orchestration"
     assert stored["user_id"] == issued_session["participant_identity"]
     assert stored["status"] == "active"
-    assert redis_repository.client.ttl(metadata_key(issued_session["room_name"])) > 0
+    assert redis_repository.client.ttl(metadata_key(issued_session["session_id"])) > 0
 
 
 def test_client_cannot_choose_its_own_room(client, redis_repository):
@@ -80,7 +83,7 @@ def test_client_cannot_choose_its_own_room(client, redis_repository):
     body = response.json()
     assert body["room_name"] != "someone-elses-room"
     assert body["participant_identity"] != "admin"
-    redis_repository.client.delete(metadata_key(body["room_name"]))
+    redis_repository.client.delete(metadata_key(body["session_id"]))
 
 
 def test_subject_is_rejected_when_empty_or_too_long(client):
@@ -89,20 +92,20 @@ def test_subject_is_rejected_when_empty_or_too_long(client):
 
 
 def test_feedback_is_stored_and_visible_in_the_summary(client, issued_session, redis_repository):
-    room = issued_session["room_name"]
-    redis_repository.append_turn(room, "user", "What is a readiness probe?")
+    session_id = issued_session["session_id"]
+    redis_repository.append_turn(session_id, "user", "What is a readiness probe?")
 
     response = client.post(
-        f"/api/session/{room}/feedback",
+        f"/api/session/{session_id}/feedback",
         json={"rating_stars": 5, "tags": ["clear_explanation"], "comment": "Great lesson"},
     )
     assert response.status_code == 200
 
-    stored = redis_repository.client.hgetall(feedback_key(room))
+    stored = redis_repository.client.hgetall(feedback_key(session_id))
     assert stored["rating_stars"] == "5"
     assert json.loads(stored["tags"]) == ["clear_explanation"]
 
-    summary = client.get(f"/api/session/{room}").json()
+    summary = client.get(f"/api/session/{session_id}").json()
     assert summary["storage_available"] is True
     assert summary["metadata"]["subject"] == "Kubernetes & Container Orchestration"
     assert summary["turns_count"] == 1
@@ -112,7 +115,7 @@ def test_feedback_is_stored_and_visible_in_the_summary(client, issued_session, r
 
 def test_feedback_rejects_an_out_of_range_rating(client, issued_session):
     response = client.post(
-        f"/api/session/{issued_session['room_name']}/feedback",
+        f"/api/session/{issued_session['session_id']}/feedback",
         json={"rating_stars": 6, "tags": []},
     )
     assert response.status_code == 422
@@ -176,24 +179,36 @@ def test_token_with_user_id_and_resumption(client, redis_repository):
     )
     assert res1.status_code == 200
     data1 = res1.json()
+    session_id = data1["session_id"]
     room1 = data1["room_name"]
     assert data1["participant_identity"] == user_id
+    assert room1.startswith(f"{session_id}--call-")
 
     # Session is in user sessions list
     sessions_res = client.get(f"/api/sessions?user_id={user_id}")
     assert sessions_res.status_code == 200
     sessions_list = sessions_res.json()["sessions"]
-    assert any(s["session_id"] == room1 for s in sessions_list)
+    assert any(s["session_id"] == session_id for s in sessions_list)
 
-    # Resume the existing session
+    # Resume the existing session using session_id
     res_resume = client.post(
         "/api/token",
-        json={"resume_session_id": room1, "user_id": user_id},
+        json={"resume_session_id": session_id, "user_id": user_id},
     )
     assert res_resume.status_code == 200
     data_resume = res_resume.json()
-    assert data_resume["room_name"] == room1
+    assert data_resume["session_id"] == session_id
+    assert data_resume["room_name"] != room1
+    assert data_resume["room_name"].startswith(f"{session_id}--call-")
     assert data_resume["participant_identity"] == user_id
+
+    # Resume using delimited room_name also resolves canonical session
+    res_resume_delimited = client.post(
+        "/api/token",
+        json={"resume_session_id": room1, "user_id": user_id},
+    )
+    assert res_resume_delimited.status_code == 200
+    assert res_resume_delimited.json()["session_id"] == session_id
 
     # Non-existent session returns 404
     res_404 = client.post(
@@ -203,5 +218,7 @@ def test_token_with_user_id_and_resumption(client, redis_repository):
     assert res_404.status_code == 404
 
     # Cleanup
-    redis_repository.client.delete(metadata_key(room1), history_key(room1), feedback_key(room1))
+    redis_repository.client.delete(
+        metadata_key(session_id), history_key(session_id), feedback_key(session_id)
+    )
 
