@@ -54,7 +54,7 @@ export default function App() {
 
       if (!res.ok) throw new Error('Token generation failed');
       const data = await res.json();
-      setSessionId(data.room_name);
+      setSessionId(data.session_id || data.room_name);
 
       const room = new Room({
         adaptiveStream: true,
@@ -159,7 +159,7 @@ export default function App() {
 
       if (!res.ok) throw new Error('Token generation failed');
       const data = await res.json();
-      setSessionId(data.room_name);
+      setSessionId(data.session_id || targetSessionId || data.room_name);
 
       const room = new Room({
         adaptiveStream: true,

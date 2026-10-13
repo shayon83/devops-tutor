@@ -28,7 +28,7 @@ from agent.src.tutor_prompts import (
     build_resume_greeting,
 )
 from agent.src.visual_tags import VisualTag
-from shared.state import AsyncRedisSessionRepository
+from shared.state import AsyncRedisSessionRepository, extract_session_id
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -143,7 +143,8 @@ def make_turn_recorder(
 async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
     room_name = ctx.room.name
-    logger.info("Agent joined room %s", room_name)
+    session_id = extract_session_id(room_name)
+    logger.info("Agent joined room %s (session %s)", room_name, session_id)
 
     repository = AsyncRedisSessionRepository(
         host=os.getenv("REDIS_HOST", "localhost"),
@@ -158,7 +159,7 @@ async def entrypoint(ctx: JobContext) -> None:
         pending.add(task)
         task.add_done_callback(pending.discard)
 
-    subject = await repository.get_subject(room_name)
+    subject = await repository.get_subject(session_id)
     agent = VoiceAgentFactory.create_agent(
         subject=subject,
         visual_sink=make_visual_publisher(ctx.room),
@@ -170,31 +171,34 @@ async def entrypoint(ctx: JobContext) -> None:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
         try:
-            turns = await repository.get_history(room_name)
+            turns = await repository.get_history(session_id)
             if len(turns) >= 2:
                 summary = await generate_session_summary(agent.llm, turns, subject)
                 if summary:
-                    await repository.update_summary(room_name, summary)
+                    await repository.update_summary(session_id, summary)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Could not generate summary on shutdown for %s: %s", room_name, exc)
-        await repository.end_session(room_name)
+            logger.warning("Could not generate summary on shutdown for %s: %s", session_id, exc)
+        await repository.end_session(session_id)
         await repository.aclose()
         metrics.ACTIVE_SESSIONS.dec()
-        logger.info("Session %s ended", room_name)
+        logger.info("Session %s ended (room %s)", session_id, room_name)
 
     ctx.add_shutdown_callback(on_shutdown)
 
     session = AgentSession()
-    session.on("conversation_item_added", make_turn_recorder(room_name, repository, spawn))
+    session.on("conversation_item_added", make_turn_recorder(session_id, repository, spawn))
 
-    prior_turns = await repository.get_history(room_name)
+    prior_turns = await repository.get_history(session_id)
     if prior_turns:
-        logger.info("Resuming session %s with %d prior turns", room_name, len(prior_turns))
+        logger.info("Resuming session %s with %d prior turns", session_id, len(prior_turns))
+        restored_ctx = llm.ChatContext()
         for turn in prior_turns:
             role = turn.get("role")
             text = turn.get("text", "")
             if role in ("user", "assistant") and text:
                 session.history.add_message(role=role, content=text)
+                restored_ctx.add_message(role=role, content=text)
+        await agent.update_chat_ctx(restored_ctx)
 
     await session.start(agent, room=ctx.room)
 
