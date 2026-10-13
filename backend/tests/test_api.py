@@ -166,3 +166,42 @@ def test_startup_fails_fast_on_missing_or_placeholder_credentials(monkeypatch, v
     monkeypatch.setenv("LIVEKIT_API_KEY", value)
     with pytest.raises(ConfigurationError):
         _required("LIVEKIT_API_KEY")
+
+
+def test_token_with_user_id_and_resumption(client, redis_repository):
+    user_id = "student-resume-flow"
+    res1 = client.post(
+        "/api/token",
+        json={"subject": "Observability", "user_id": user_id},
+    )
+    assert res1.status_code == 200
+    data1 = res1.json()
+    room1 = data1["room_name"]
+    assert data1["participant_identity"] == user_id
+
+    # Session is in user sessions list
+    sessions_res = client.get(f"/api/sessions?user_id={user_id}")
+    assert sessions_res.status_code == 200
+    sessions_list = sessions_res.json()["sessions"]
+    assert any(s["session_id"] == room1 for s in sessions_list)
+
+    # Resume the existing session
+    res_resume = client.post(
+        "/api/token",
+        json={"resume_session_id": room1, "user_id": user_id},
+    )
+    assert res_resume.status_code == 200
+    data_resume = res_resume.json()
+    assert data_resume["room_name"] == room1
+    assert data_resume["participant_identity"] == user_id
+
+    # Non-existent session returns 404
+    res_404 = client.post(
+        "/api/token",
+        json={"resume_session_id": "non-existent-session-id", "user_id": user_id},
+    )
+    assert res_404.status_code == 404
+
+    # Cleanup
+    redis_repository.client.delete(metadata_key(room1), history_key(room1), feedback_key(room1))
+

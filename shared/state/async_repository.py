@@ -17,7 +17,12 @@ from redis.backoff import ExponentialBackoff
 from redis.exceptions import RedisError
 from redis.retry import Retry
 
-from .keys import DEFAULT_SESSION_TTL_SECONDS, history_key, metadata_key
+from .keys import (
+    DEFAULT_SESSION_TTL_SECONDS,
+    history_key,
+    metadata_key,
+    user_sessions_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +70,75 @@ class AsyncRedisSessionRepository:
         except RedisError as exc:
             logger.warning("Could not read subject for %s: %s", session_id, exc)
             return None
+
+    async def get_metadata(self, session_id: str) -> dict[str, str]:
+        try:
+            return dict(await self.client.hgetall(metadata_key(session_id)))
+        except RedisError as exc:
+            logger.warning("Could not read metadata for %s: %s", session_id, exc)
+            return {}
+
+    async def index_user_session(
+        self, user_id: str, session_id: str, timestamp: float | None = None
+    ) -> None:
+        if not user_id:
+            return
+        ts = timestamp if timestamp is not None else time.time()
+        try:
+            key = user_sessions_key(user_id)
+            async with self.client.pipeline(transaction=False) as pipe:
+                pipe.zadd(key, {session_id: ts})
+                pipe.expire(key, self.ttl_seconds)
+                await pipe.execute()
+        except RedisError as exc:
+            logger.warning("Could not index session for user %s: %s", user_id, exc)
+
+    async def update_summary(self, session_id: str, summary: str) -> None:
+        now = time.time()
+        try:
+            key = metadata_key(session_id)
+            async with self.client.pipeline(transaction=False) as pipe:
+                pipe.hset(key, mapping={"summary": summary, "updated_at": now})
+                pipe.expire(key, self.ttl_seconds)
+                await pipe.execute()
+            user_id = await self.client.hget(key, "user_id")
+            if user_id:
+                await self.index_user_session(user_id, session_id, now)
+        except RedisError as exc:
+            logger.warning("Could not update summary for %s: %s", session_id, exc)
+
+    async def get_user_sessions(self, user_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        if not user_id:
+            return []
+        try:
+            key = user_sessions_key(user_id)
+            session_ids = await self.client.zrevrange(key, 0, limit - 1)
+        except RedisError as exc:
+            logger.warning("Could not read user sessions for %s: %s", user_id, exc)
+            return []
+
+        sessions = []
+        for sid in session_ids:
+            try:
+                meta = dict(await self.client.hgetall(metadata_key(sid)))
+                if not meta:
+                    continue
+                turn_count = await self.client.llen(history_key(sid))
+                subj = meta.get("subject", "DevOps")
+                summary = meta.get("summary", f"Discussion on {subj}")
+                sessions.append({
+                    "session_id": sid,
+                    "user_id": meta.get("user_id", user_id),
+                    "subject": subj,
+                    "summary": summary,
+                    "status": meta.get("status", "ended"),
+                    "created_at": float(meta.get("created_at", 0)),
+                    "updated_at": float(meta.get("updated_at", meta.get("created_at", 0))),
+                    "turns_count": turn_count,
+                })
+            except RedisError as exc:
+                logger.warning("Could not fetch details for session %s: %s", sid, exc)
+        return sessions
 
     async def append_turn(
         self,

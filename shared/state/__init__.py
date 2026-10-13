@@ -8,7 +8,13 @@ copy that can drift.
 """
 
 from .async_repository import AsyncRedisSessionRepository
-from .keys import DEFAULT_SESSION_TTL_SECONDS, feedback_key, history_key, metadata_key
+from .keys import (
+    DEFAULT_SESSION_TTL_SECONDS,
+    feedback_key,
+    history_key,
+    metadata_key,
+    user_sessions_key,
+)
 from .repository import RedisSessionRepository
 
 __all__ = [
@@ -18,4 +24,5 @@ __all__ = [
     "feedback_key",
     "history_key",
     "metadata_key",
+    "user_sessions_key",
 ]

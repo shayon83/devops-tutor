@@ -15,14 +15,18 @@ from typing import Any
 
 from dotenv import load_dotenv
 from livekit import rtc
-from livekit.agents import JobContext, WorkerOptions, cli
+from livekit.agents import JobContext, WorkerOptions, cli, llm
 from livekit.agents.llm import ChatMessage
 from livekit.agents.voice import AgentSession
 from livekit.agents.voice.events import ConversationItemAddedEvent
 
 from agent.src import metrics
 from agent.src.factory import VoiceAgentFactory
-from agent.src.tutor_prompts import GREETING_INSTRUCTIONS
+from agent.src.tutor_prompts import (
+    GREETING_INSTRUCTIONS,
+    SUMMARY_PROMPT,
+    build_resume_greeting,
+)
 from agent.src.visual_tags import VisualTag
 from shared.state import AsyncRedisSessionRepository
 
@@ -37,6 +41,45 @@ VISUAL_DATA_TOPIC = "visual"
 AGENT_METRICS_PORT = 8001
 
 Spawn = Callable[[Coroutine[Any, Any, Any]], None]
+
+
+async def generate_session_summary(
+    llm_instance: Any,
+    turns: list[dict[str, Any]],
+    subject: str | None = None,
+) -> str:
+    """Generates a concise 1-line summary using the agent's LLM or a rule-based fallback."""
+    if not turns:
+        return f"Discussion on {subject or 'DevOps'}"
+
+    sample_turns = turns[-6:]
+    dialogue_snippet = "\n".join(
+        f"{t.get('role', 'speaker')}: {t.get('text', '')}" for t in sample_turns
+    )
+
+    try:
+        chat_ctx = llm.ChatContext()
+        chat_ctx.add_message(role="system", content=SUMMARY_PROMPT)
+        chat_ctx.add_message(
+            role="user",
+            content=f"Subject: {subject or 'DevOps'}\nDialogue:\n{dialogue_snippet}",
+        )
+        stream = llm_instance.chat(chat_ctx=chat_ctx)
+        chunks = []
+        async for chunk in stream:
+            if chunk.delta and chunk.delta.content:
+                chunks.append(chunk.delta.content)
+        summary = "".join(chunks).strip().strip('"').strip("'")
+        if summary:
+            return summary
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("LLM summarization failed, using rule-based fallback: %s", exc)
+
+    first_user_turn = next((t.get("text", "") for t in turns if t.get("role") == "user"), "")
+    if first_user_turn:
+        clean_first = first_user_turn[:40].strip()
+        return f"{subject or 'DevOps'}: {clean_first}"
+    return f"Discussion on {subject or 'DevOps'}"
 
 
 def make_visual_publisher(room: rtc.Room) -> Callable[[VisualTag], Coroutine[Any, Any, None]]:
@@ -115,11 +158,25 @@ async def entrypoint(ctx: JobContext) -> None:
         pending.add(task)
         task.add_done_callback(pending.discard)
 
+    subject = await repository.get_subject(room_name)
+    agent = VoiceAgentFactory.create_agent(
+        subject=subject,
+        visual_sink=make_visual_publisher(ctx.room),
+    )
+
     metrics.ACTIVE_SESSIONS.inc()
 
     async def on_shutdown() -> None:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
+        try:
+            turns = await repository.get_history(room_name)
+            if len(turns) >= 2:
+                summary = await generate_session_summary(agent.llm, turns, subject)
+                if summary:
+                    await repository.update_summary(room_name, summary)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not generate summary on shutdown for %s: %s", room_name, exc)
         await repository.end_session(room_name)
         await repository.aclose()
         metrics.ACTIVE_SESSIONS.dec()
@@ -127,20 +184,25 @@ async def entrypoint(ctx: JobContext) -> None:
 
     ctx.add_shutdown_callback(on_shutdown)
 
-    subject = await repository.get_subject(room_name)
-    agent = VoiceAgentFactory.create_agent(
-        subject=subject,
-        visual_sink=make_visual_publisher(ctx.room),
-    )
-
     session = AgentSession()
     session.on("conversation_item_added", make_turn_recorder(room_name, repository, spawn))
 
+    prior_turns = await repository.get_history(room_name)
+    if prior_turns:
+        logger.info("Resuming session %s with %d prior turns", room_name, len(prior_turns))
+        for turn in prior_turns:
+            role = turn.get("role")
+            text = turn.get("text", "")
+            if role in ("user", "assistant") and text:
+                session.history.add_message(role=role, content=text)
+
     await session.start(agent, room=ctx.room)
 
-    # Speak first: otherwise the learner sits in silence not knowing whether
-    # the tutor connected.
-    await session.generate_reply(instructions=GREETING_INSTRUCTIONS)
+    # Speak first: resume greeting if continuing a session, otherwise initial greeting.
+    if prior_turns:
+        await session.generate_reply(instructions=build_resume_greeting(subject))
+    else:
+        await session.generate_reply(instructions=GREETING_INSTRUCTIONS)
 
 
 if __name__ == "__main__":
