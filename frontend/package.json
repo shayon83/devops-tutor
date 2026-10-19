@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "livekit-client": "^2.0.0",
+    "livekit-client": "^2.23.0",
     "mermaid": "^12.2.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
