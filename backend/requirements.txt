@@ -2,7 +2,7 @@
 # build reproducible from a clean checkout with no local wheel cache.
 fastapi==0.141.1
 uvicorn==0.54.0
-livekit-api==1.2.1
+livekit-api==1.2.2
 redis==8.1.0
 prometheus-client==0.26.0
 pydantic==2.13.5
