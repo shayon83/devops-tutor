@@ -12,7 +12,7 @@
     "livekit-client": "^2.23.0",
     "mermaid": "^12.2.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react-dom": "^19.3.1",
     "lucide-react": "^1.54.0"
   },
   "devDependencies": {
