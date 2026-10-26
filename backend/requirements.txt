@@ -5,5 +5,5 @@ uvicorn==0.54.0
 livekit-api==1.2.1
 redis==8.1.0
 prometheus-client==0.26.0
-pydantic==2.13.5
+pydantic==2.14.1
 python-dotenv==1.2.3
